@@ -235,6 +235,31 @@
   .type-target .cursor { display: inline-block; width: 8px; height: 15px; background: var(--ink-dim); vertical-align: middle; margin-left: 2px; animation: blink 1s step-end infinite; }
 
   /* ---------- monster (cold accent intrudes) ---------- */
+  #comparison { border-top: 1px solid rgba(255,184,77,0.12); }
+  .compare-table { margin-top: 26px; border: 1px solid rgba(255,184,77,0.2); border-radius: 4px; overflow: hidden; }
+  .compare-row {
+    display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    border-bottom: 1px solid rgba(255,184,77,0.1);
+  }
+  .compare-row:last-child { border-bottom: none; }
+  .compare-row > div {
+    padding: 14px 10px; font-size: 13px; text-align: center; color: var(--ink-dim);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .compare-row > div:first-child { justify-content: flex-start; text-align: left; color: var(--ink); }
+  .compare-head { background: rgba(255,184,77,0.08); font-weight: 700; }
+  .compare-head > div { color: var(--amber); font-size: 11px; letter-spacing: 1px; }
+  .compare-row .yes { color: #4ec96a; font-weight: 700; }
+  .compare-row .no { color: var(--danger-dim); font-weight: 700; }
+  .compare-row .maybe { color: var(--amber-faint); font-size: 10px; letter-spacing: 1px; }
+  @media (max-width: 640px) {
+    .compare-row { grid-template-columns: 1.3fr 0.8fr 0.8fr 0.8fr; }
+    .compare-row > div { padding: 10px 4px; font-size: 11px; }
+  }
+
+  #lore { border-top: 1px solid rgba(255,184,77,0.12); background: rgba(10,8,3,0.4); }
+  #lore p { font-style: italic; }
+
   #monster {
     border-top: 1px solid rgba(255,59,59,0.15);
     background:
@@ -276,6 +301,16 @@
 
   /* ---------- team ---------- */
   #team { border-top: 1px solid rgba(255,184,77,0.12); }
+
+  #presskit { border-top: 1px solid rgba(255,184,77,0.12); }
+  .press-block { margin-top: 30px; }
+  .press-label { font-size: 11px; letter-spacing: 2px; color: var(--amber-faint); margin-bottom: 10px; }
+  .press-copy {
+    background: var(--panel); border: 1px solid rgba(255,184,77,0.2); border-radius: 4px;
+    padding: 16px; font-size: 14px; margin: 0;
+  }
+  .press-facts { list-style: none; padding: 0; margin: 0; font-size: 14px; color: var(--ink-dim); display: grid; gap: 8px; }
+  .press-facts b { color: var(--ink); }
   .team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
   .team-card {
     background: var(--panel); border: 1px solid rgba(255,184,77,0.2); border-radius: 4px;
@@ -340,6 +375,7 @@
     <a class="menu-btn" href="#about">ABOUT</a>
     <a class="menu-btn" href="#features">FEATURES</a>
     <a class="menu-btn" href="#monster">MEET THE WATCHER</a>
+    <a class="menu-btn" href="#faq">FAQ</a>
     <a class="menu-btn" href="#team">DEVELOPERS</a>
     <a class="menu-btn" href="#rules">RULES</a>
     <a class="menu-btn" href="#roadmap">UPDATES</a>
@@ -429,6 +465,56 @@
   </div>
 </section>
 
+<section id="comparison" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">HOW IT'S DIFFERENT</div>
+    <h2 class="section-title">Not quite either genre</h2>
+    <p>Most VR movement games are built to play, not to scare you. Most VR horror games use joysticks or teleporting, not your actual body. THE UNSEEN sits between the two on purpose — the fear hits harder because escaping it takes real physical effort, not a thumbstick push.</p>
+    <div class="compare-table">
+      <div class="compare-row compare-head">
+        <div></div>
+        <div>THE UNSEEN</div>
+        <div>Movement games</div>
+        <div>Horror games</div>
+      </div>
+      <div class="compare-row">
+        <div>Real push-based movement</div>
+        <div class="yes">✓</div>
+        <div class="yes">✓</div>
+        <div class="no">✕</div>
+      </div>
+      <div class="compare-row">
+        <div>A real threat hunting you</div>
+        <div class="yes">✓</div>
+        <div class="no">✕</div>
+        <div class="yes">✓</div>
+      </div>
+      <div class="compare-row">
+        <div>Physical exertion as gameplay</div>
+        <div class="yes">✓</div>
+        <div class="yes">✓</div>
+        <div class="no">✕</div>
+      </div>
+      <div class="compare-row">
+        <div>Backrooms / liminal setting</div>
+        <div class="yes">✓</div>
+        <div class="no">✕</div>
+        <div class="maybe">SOME</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="lore" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">WHAT IS THIS PLACE</div>
+    <h2 class="section-title">Nobody built this</h2>
+    <p>No one designed it. It doesn't appear on any blueprint, any map, any deed. You don't find the backrooms — it finds you. A wrong turn. A door that wasn't there yesterday. A moment of not paying attention.</p>
+    <p>The walls are always the same sick yellow. The lights always hum the same broken frequency. And something that used to be alive is always a few rooms ahead of you, or a few rooms behind — you're never quite sure which is worse.</p>
+    <p>Nobody has mapped it end to end. Nobody who's tried has come back to finish the map.</p>
+  </div>
+</section>
+
 <section id="monster" class="reveal">
   <div class="wrap">
     <div class="eyebrow">FIRST ENCOUNTER</div>
@@ -455,6 +541,57 @@
   </div>
 </section>
 
+<section id="faq" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">FAQ</div>
+    <h2 class="section-title">Questions people actually ask</h2>
+    <ul class="feature-list" id="faqList">
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">When is it releasing?</span></div>
+        </div>
+        <div class="fmore" data-text="No fixed date. Early access happens once there's one full map and one working monster encounter to survive. Progress updates go to the Roadmap section and the Discord first, always."></div>
+      </li>
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">Will it be free?</span></div>
+        </div>
+        <div class="fmore" data-text="Not decided yet. If cosmetics or paid content happen later, the core game itself staying good is the priority either way."></div>
+      </li>
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">What headset do I need?</span></div>
+        </div>
+        <div class="fmore" data-text="Built for Meta Quest. No PC VR support planned right now, though that could change down the line."></div>
+      </li>
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">Is it multiplayer?</span></div>
+        </div>
+        <div class="fmore" data-text="Not in the current build. Multiplayer is a real possibility later, but the solo experience is being nailed down first."></div>
+      </li>
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">Can I help build it?</span></div>
+        </div>
+        <div class="fmore" data-text="Yes — reach out in the Discord. Development, art, and marketing help all come from the community, not a formal hiring process."></div>
+      </li>
+      <li tabindex="0" role="button">
+        <div class="frow">
+          <span class="arrow">→</span>
+          <div><span class="ftitle">Will there be more monsters?</span></div>
+        </div>
+        <div class="fmore" data-text="The Watcher is the first. More are planned as the game grows, each with its own behavior rather than a palette-swap."></div>
+      </li>
+    </ul>
+  </div>
+</section>
+
 <section id="team" class="reveal">
   <div class="wrap">
     <div class="eyebrow">TEAM</div>
@@ -468,6 +605,45 @@
         <div class="team-role">DEVELOPERS</div>
         <div class="team-name">Icy — Builder</div>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="presskit" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">FOR CREATORS &amp; PRESS</div>
+    <h2 class="section-title">Press Kit</h2>
+    <p>Covering the game or want to feature it? Here's everything useful in one place.</p>
+
+    <div class="press-block">
+      <div class="press-label">BOILERPLATE</div>
+      <p class="press-copy" id="boilerplateText">THE UNSEEN is a VR-only backrooms horror game in development by Viper Studios, built around real push-based gorilla movement instead of joystick or teleport locomotion. Players are hunted through shifting liminal corridors by The Watcher, a monster that's half organic, half machine.</p>
+      <button class="menu-btn" id="copyBoilerplate" style="margin-top:10px;">COPY TEXT</button>
+    </div>
+
+    <div class="press-block">
+      <div class="press-label">KEY FACTS</div>
+      <ul class="press-facts">
+        <li><b>Platform:</b> Meta Quest (VR only)</li>
+        <li><b>Genre:</b> Horror / Movement</li>
+        <li><b>Status:</b> In development, pre-release</li>
+        <li><b>Studio:</b> Viper Studios</li>
+        <li><b>Players:</b> Single-player</li>
+      </ul>
+    </div>
+
+    <div class="press-block">
+      <div class="press-label">ASSETS</div>
+      <p style="font-size:14px;">Logo/icon files below. Gameplay screenshots and footage aren't captured yet — check the Media section above for status, or ask in Discord for the latest.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">
+        <a class="menu-btn" href="apple-touch-icon.png" download>DOWNLOAD ICON (PNG)</a>
+        <a class="menu-btn" href="og-image.jpeg" download>DOWNLOAD LOGO CARD (JPG)</a>
+      </div>
+    </div>
+
+    <div class="press-block">
+      <div class="press-label">CONTACT</div>
+      <p style="font-size:14px;">Fastest way to reach the team is Discord — <a href="https://discord.gg/qaKXv4vcn" target="_blank" rel="noopener">discord.gg/qaKXv4vcn</a></p>
     </div>
   </div>
 </section>
@@ -763,10 +939,11 @@ function reducedMotionActive(){
   targets.forEach(el => obs.observe(el));
 })();
 
-// ---------- expandable feature list ----------
-(function(){
-  document.querySelectorAll('#featureList li').forEach(li=>{
+// ---------- expandable lists (features + FAQ share this) ----------
+function setupExpandableList(selector){
+  document.querySelectorAll(selector + ' li').forEach(li=>{
     const more = li.querySelector('.fmore');
+    if(!more) return;
     const fullText = more.dataset.text;
     let typed = false;
     function activate(){
@@ -797,6 +974,25 @@ function reducedMotionActive(){
         activate();
       }
     });
+  });
+}
+setupExpandableList('#featureList');
+setupExpandableList('#faqList');
+
+// ---------- press kit: copy boilerplate text ----------
+(function(){
+  const btn = document.getElementById('copyBoilerplate');
+  if(!btn) return;
+  const original = btn.textContent;
+  btn.addEventListener('click', async ()=>{
+    const text = document.getElementById('boilerplateText').textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'COPIED';
+    } catch(e) {
+      btn.textContent = 'COULDN\'T COPY';
+    }
+    setTimeout(()=>{ btn.textContent = original; }, 2000);
   });
 })();
 
