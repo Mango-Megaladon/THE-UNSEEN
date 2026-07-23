@@ -325,7 +325,7 @@
 
 <div id="whiteFlash"></div>
 
-<section id="intro">
+<section id="intro" role="button" tabindex="0" aria-label="Tap or press enter to continue to the main menu">
   <canvas id="heroCanvas"></canvas>
   <div class="content">
     <h1 class="game-title">THE UNSEEN</h1>
@@ -334,7 +334,7 @@
 </section>
 
 <section id="menu" style="background-image:url('menu_background.jpeg');">
-  <button id="settingsBtn" class="nav-top-left">⚙</button>
+  <button id="settingsBtn" class="nav-top-left" aria-label="Open settings">⚙</button>
   <a class="menu-btn discord nav-top-right" href="https://discord.gg/qaKXv4vcn" target="_blank" rel="noopener">JOIN THE DISCORD</a>
   <div class="nav-bottom">
     <a class="menu-btn" href="#about">ABOUT</a>
@@ -354,9 +354,9 @@
   <audio id="menuMusic" src="menu_music.wav" loop preload="auto"></audio>
 </section>
 
-<div id="settingsOverlay">
+<div id="settingsOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsHeading">
   <div class="settings-panel">
-    <h3>SETTINGS <button class="settings-close" id="settingsClose">✕</button></h3>
+    <h3 id="settingsHeading">SETTINGS <button class="settings-close" id="settingsClose" aria-label="Close settings">✕</button></h3>
     <div class="settings-row">
       <div>
         <div class="settings-label">Music</div>
@@ -396,28 +396,28 @@
     <h2 class="section-title">What makes it move different</h2>
     <p style="margin-bottom:14px;">As a gorilla VR game, The Unseen stands apart from other backrooms horror games by making how you move the whole point.</p>
     <ul class="feature-list" id="featureList">
-      <li>
+      <li tabindex="0" role="button">
         <div class="frow">
           <span class="arrow">→</span>
           <div><span class="ftitle">Real push-based locomotion</span><br><span class="fdesc">Get your hands near a surface and push off — real physics, real momentum, no snap-turning your way to safety.</span></div>
         </div>
         <div class="fmore" data-text="Gentle push, short distance. Full-force shove, you'll actually fly. Gravity's real too — mistime a push near a ledge and you're finding out the hard way."></div>
       </li>
-      <li>
+      <li tabindex="0" role="button">
         <div class="frow">
           <span class="arrow">→</span>
           <div><span class="ftitle">A growing roster of monsters</span><br><span class="fdesc">Starting with The Watcher — more to come as the game grows.</span></div>
         </div>
         <div class="fmore" data-text="Every monster gets its own behavior, not a reskin. The Watcher hunts by sound. What comes after it won't."></div>
       </li>
-      <li>
+      <li tabindex="0" role="button">
         <div class="frow">
           <span class="arrow">→</span>
           <div><span class="ftitle">Backrooms that don't stay still</span><br><span class="fdesc">Liminal, fluorescent-lit corridors that never feel quite safe to be in.</span></div>
         </div>
         <div class="fmore" data-text="The lights flicker for a reason. Standing still in the dark for too long is never a neutral choice."></div>
       </li>
-      <li>
+      <li tabindex="0" role="button">
         <div class="frow">
           <span class="arrow">→</span>
           <div><span class="ftitle">Built by Viper Studios</span><br><span class="fdesc">An independent project, built from scratch and shaped by community feedback.</span></div>
@@ -489,6 +489,12 @@
   <div class="wrap">
     <div class="eyebrow">ROADMAP</div>
     <h2 class="section-title">Where things stand</h2>
+    <p style="font-size:12px;letter-spacing:1.5px;color:var(--amber-faint);margin:-16px 0 30px;">LAST UPDATED: JULY 23, 2026</p>
+
+    <div class="roadmap-row">
+      <span class="roadmap-status status-now">JUL 23, 2026</span>
+      <span>Renamed from an earlier working title to THE UNSEEN, and this website went live.</span>
+    </div>
     <div class="roadmap-row">
       <span class="roadmap-status status-now">IN PROGRESS</span>
       <span>Core movement, spawn hub, and the first monster encounter are being built and tested.</span>
@@ -509,7 +515,10 @@
     <div class="eyebrow">JOIN US</div>
     <h2 class="section-title">Be here before it launches</h2>
     <p style="margin-left:auto;margin-right:auto;">Updates, early builds, and a say in what gets built next — all happen in the Discord first.</p>
-    <a class="cta" href="https://discord.gg/qaKXv4vcn" target="_blank" rel="noopener">JOIN THE DISCORD</a>
+    <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+      <a class="cta" href="https://discord.gg/qaKXv4vcn" target="_blank" rel="noopener">JOIN THE DISCORD</a>
+      <button class="cta ghost" id="shareBtn" style="border:1px solid var(--amber);cursor:pointer;">SHARE THIS GAME</button>
+    </div>
   </div>
 </section>
 
@@ -760,7 +769,7 @@ function reducedMotionActive(){
     const more = li.querySelector('.fmore');
     const fullText = more.dataset.text;
     let typed = false;
-    li.addEventListener('click', ()=>{
+    function activate(){
       const opening = !li.classList.contains('open');
       li.classList.toggle('open');
       if(opening && !typed){
@@ -779,6 +788,13 @@ function reducedMotionActive(){
             if(i >= fullText.length){ clearInterval(timer); cursor.remove(); }
           }, 14);
         }
+      }
+    }
+    li.addEventListener('click', activate);
+    li.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        activate();
       }
     });
   });
@@ -830,7 +846,7 @@ function reducedMotionActive(){
   const flash = document.getElementById('whiteFlash');
   const reduceMotion = reducedMotionActive();
 
-  intro.addEventListener('click', ()=>{
+  function continueFromIntro(){
     const fadeDuration = reduceMotion ? 0 : 2600;
     const holdDuration = reduceMotion ? 0 : 1200;
 
@@ -855,6 +871,14 @@ function reducedMotionActive(){
         flash.classList.remove('flash'); // start fading back from white
       }, holdDuration);
     }, fadeDuration);
+  }
+
+  intro.addEventListener('click', continueFromIntro);
+  intro.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      continueFromIntro();
+    }
   });
 
   // extra safety net — iOS Safari sometimes allows a drag-scroll to
@@ -901,6 +925,35 @@ function reducedMotionActive(){
       document.documentElement.classList.remove('force-reduce-motion');
       motionPill.classList.replace('on','off');
       motionPill.textContent = 'OFF';
+    }
+  });
+})();
+
+// ---------- share button — uses the native share sheet on
+// phones/tablets where available, falls back to copying the link ----------
+(function(){
+  const btn = document.getElementById('shareBtn');
+  if(!btn) return;
+  const originalText = btn.textContent;
+
+  btn.addEventListener('click', async ()=>{
+    const shareData = {
+      title: "THE UNSEEN — VR Backrooms Horror Game",
+      text: "Check out THE UNSEEN — a VR backrooms horror game with real gorilla movement.",
+      url: window.location.href
+    };
+    if(navigator.share){
+      try { await navigator.share(shareData); }
+      catch(e) { /* user cancelled the share sheet — not an error */ }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        btn.textContent = 'LINK COPIED';
+        setTimeout(()=>{ btn.textContent = originalText; }, 2000);
+      } catch(e) {
+        btn.textContent = 'COULDN\'T COPY';
+        setTimeout(()=>{ btn.textContent = originalText; }, 2000);
+      }
     }
   });
 })();
