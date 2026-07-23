@@ -33,6 +33,7 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: var(--body); line-height: 1.6; overflow-x: hidden;
   }
+  body.intro-locked { overflow: hidden; height: 100vh; }
   a { color: var(--amber); }
 
   ::selection { background: var(--amber); color: #1a1509; }
@@ -289,7 +290,7 @@
   }
 </style>
 </head>
-<body>
+<body class="intro-locked">
 
 <div id="whiteFlash"></div>
 
@@ -792,6 +793,7 @@ function reducedMotionActive(){
 
     setTimeout(()=>{
       intro.style.display = 'none';
+      document.body.classList.remove('intro-locked');
       setTimeout(()=>{
         flash.classList.remove('flash');
       }, holdDuration);
