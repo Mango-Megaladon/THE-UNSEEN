@@ -235,6 +235,31 @@
   .type-target .cursor { display: inline-block; width: 8px; height: 15px; background: var(--ink-dim); vertical-align: middle; margin-left: 2px; animation: blink 1s step-end infinite; }
 
   /* ---------- monster (cold accent intrudes) ---------- */
+  #play { border-top: 1px solid rgba(255,184,77,0.12); }
+  .game-frame {
+    position: relative; margin-top: 24px; border: 2px solid rgba(255,184,77,0.35);
+    border-radius: 4px; overflow: hidden; background: #0d0a04;
+    aspect-ratio: 16/8; max-width: 100%;
+  }
+  #gameCanvas { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
+  .game-hud {
+    position: absolute; top: 10px; left: 12px; right: 12px; z-index: 3;
+    display: flex; justify-content: space-between;
+    font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--amber);
+    text-shadow: 0 0 6px rgba(0,0,0,0.8); pointer-events: none;
+  }
+  .game-overlay {
+    position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(5,3,1,0.72); cursor: pointer; padding: 16px;
+  }
+  .game-overlay.hidden { display: none; }
+  .game-overlay-title {
+    font-family: var(--display); font-size: clamp(22px, 5vw, 34px); color: var(--amber);
+    letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 20px rgba(255,184,77,0.4);
+  }
+  .game-overlay-sub { font-size: 12px; letter-spacing: 2px; color: var(--ink-dim); }
+
   #comparison { border-top: 1px solid rgba(255,184,77,0.12); }
   .compare-table { margin-top: 26px; border: 1px solid rgba(255,184,77,0.2); border-radius: 4px; overflow: hidden; }
   .compare-row {
@@ -465,6 +490,26 @@
   </div>
 </section>
 
+<section id="play" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">WHILE YOU WAIT</div>
+    <h2 class="section-title">Something to actually play right now</h2>
+    <p>The real game needs a headset. This doesn't. Hold to drive, hold in the air to flip — land it clean or it's over.</p>
+    <div class="game-frame">
+      <canvas id="gameCanvas"></canvas>
+      <div class="game-hud">
+        <span id="gameScore">0</span>
+        <span id="gameBest">BEST: 0</span>
+      </div>
+      <div id="gameOverlay" class="game-overlay">
+        <div class="game-overlay-title" id="gameOverlayTitle">DRIVE</div>
+        <div class="game-overlay-sub" id="gameOverlaySub">HOLD TO ACCELERATE — HOLD IN THE AIR TO FLIP</div>
+      </div>
+    </div>
+    <div class="hint-tap">HOLD TO DRIVE · HOLD WHILE AIRBORNE TO FLIP · LAND UPRIGHT OR EXPLODE</div>
+  </div>
+</section>
+
 <section id="comparison" class="reveal">
   <div class="wrap">
     <div class="eyebrow">HOW IT'S DIFFERENT</div>
@@ -558,7 +603,7 @@
           <span class="arrow">→</span>
           <div><span class="ftitle">Will it be free?</span></div>
         </div>
-        <div class="fmore" data-text="Not decided yet. If cosmetics or paid content happen later, the core game itself staying good is the priority either way."></div>
+        <div class="fmore" data-text="Yes, the game itself is free. There will be in-game purchases (cosmetics and similar) further down the line, but the core game staying free and good to play is the priority."></div>
       </li>
       <li tabindex="0" role="button">
         <div class="frow">
@@ -572,7 +617,7 @@
           <span class="arrow">→</span>
           <div><span class="ftitle">Is it multiplayer?</span></div>
         </div>
-        <div class="fmore" data-text="Not in the current build. Multiplayer is a real possibility later, but the solo experience is being nailed down first."></div>
+        <div class="fmore" data-text="Yes, multiplayer is planned. The solo experience is being nailed down first since it's the foundation everything else builds on."></div>
       </li>
       <li tabindex="0" role="button">
         <div class="frow">
@@ -994,6 +1039,298 @@ setupExpandableList('#faqList');
     }
     setTimeout(()=>{ btn.textContent = original; }, 2000);
   });
+})();
+
+// ---------- mini-game: hill-racer with flips, styled to match the real game ----------
+(function(){
+  const canvas = document.getElementById('gameCanvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('gameOverlay');
+  const overlayTitle = document.getElementById('gameOverlayTitle');
+  const overlaySub = document.getElementById('gameOverlaySub');
+  const scoreEl = document.getElementById('gameScore');
+  const bestEl = document.getElementById('gameBest');
+  const frame = canvas.closest('.game-frame');
+
+  let W, H, dpr;
+  function resize(){
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const rect = frame.getBoundingClientRect();
+    W = rect.width; H = rect.height;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ---- tunables ----
+  const GRAVITY = 0.0028;
+  const ACCEL = 0.00055;
+  const FRICTION = 0.00035;
+  const MAX_SPEED = 0.60;
+  const MIN_SPEED = 0.15;
+  const FLIP_RATE = 0.62;          // degrees per ms while holding + airborne
+  const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
+  const SCORE_RATE = 0.03;         // score per world-unit of progress
+  const FLIP_BONUS = 150;
+  const CAR_SCREEN_X_RATIO = 0.28;
+  const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
+
+  // gentle rolling hills everywhere, plus deliberate launch ramps at
+  // regular intervals — explicit ramps are far more reliable and fair
+  // than trying to detect launches from noisy continuous terrain
+  const RAMP_PERIOD = 700, RAMP_WIDTH = 130, RAMP_HEIGHT = 68;
+  function rampPhase(wx){
+    return ((wx % RAMP_PERIOD) + RAMP_PERIOD) % RAMP_PERIOD;
+  }
+  function groundHeight(wx){
+    const baseline = H * 0.6;
+    let y = baseline
+      + Math.sin(wx*0.006) * 20
+      + Math.sin(wx*0.014 + 1.3) * 11;
+
+    const phase = rampPhase(wx);
+    if(phase < RAMP_WIDTH){
+      const t = phase / RAMP_WIDTH;
+      if(t < 0.5){
+        y -= Math.sin((t/0.5) * Math.PI/2) * RAMP_HEIGHT;
+      } else {
+        const t2 = (t-0.5)/0.5;
+        y -= (1 - t2*t2) * RAMP_HEIGHT;
+      }
+    }
+    return y;
+  }
+  function slopeAngleAt(wx){
+    const d = 5;
+    const y1 = groundHeight(wx-d), y2 = groundHeight(wx+d);
+    return Math.atan2(y2-y1, 2*d) * 180/Math.PI;
+  }
+
+  let state = 'ready'; // ready | playing | gameover
+  let holding = false;
+  let car, watcherOffset, score, best, lastTime, flipAccum, flipCount;
+
+  function loadBest(){
+    try { return parseInt(localStorage.getItem('theunseen_game_best') || '0', 10); } catch(e){ return 0; }
+  }
+  function saveBest(v){
+    try { localStorage.setItem('theunseen_game_best', String(v)); } catch(e){}
+  }
+  best = loadBest();
+  bestEl.textContent = 'BEST: ' + best;
+
+  function resetGame(){
+    car = {
+      worldX: 0, y: groundHeight(0), vy: 0,
+      rotation: 0, speed: MIN_SPEED, grounded: true
+    };
+    watcherOffset = 240;
+    score = 0;
+    flipAccum = 0;
+    flipCount = 0;
+    lastTime = null;
+  }
+  resetGame();
+
+  function startOrRestart(){
+    if(state === 'ready' || state === 'gameover'){
+      resetGame();
+      state = 'playing';
+      overlay.classList.add('hidden');
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function setHolding(v){
+    holding = v;
+  }
+
+  canvas.addEventListener('pointerdown', (e)=>{ startOrRestart(); setHolding(true); });
+  window.addEventListener('pointerup', ()=> setHolding(false));
+  overlay.addEventListener('pointerdown', (e)=>{ startOrRestart(); setHolding(true); });
+  window.addEventListener('keydown', (e)=>{
+    if(e.code !== 'Space') return;
+    e.preventDefault();
+    startOrRestart();
+    setHolding(true);
+  });
+  window.addEventListener('keyup', (e)=>{
+    if(e.code === 'Space') setHolding(false);
+  });
+
+  function explode(){
+    state = 'gameover';
+    const finalScore = Math.floor(score);
+    if(finalScore > best){
+      best = finalScore;
+      saveBest(best);
+      bestEl.textContent = 'BEST: ' + best;
+    }
+    overlayTitle.textContent = 'DESTROYED';
+    overlaySub.textContent = 'SCORE ' + finalScore + (flipCount ? ' · ' + flipCount + ' FLIPS' : '') + ' — HOLD TO RETRY';
+    overlay.classList.remove('hidden');
+  }
+
+  function drawBackground(){
+    ctx.fillStyle = '#0d0a04';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,217,122,0.06)';
+    ctx.lineWidth = 1;
+    const spacing = 70;
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    const seamShift = camOffset % spacing;
+    for(let x = -seamShift; x < W; x += spacing){
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H*0.35); ctx.stroke();
+    }
+  }
+
+  function drawTerrain(){
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    for(let sx = 0; sx <= W; sx += 6){
+      const wx = sx + camOffset;
+      ctx.lineTo(sx, groundHeight(wx));
+    }
+    ctx.lineTo(W, H);
+    ctx.closePath();
+    ctx.fillStyle = '#3a3010';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,184,77,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for(let sx = 0; sx <= W; sx += 6){
+      const wx = sx + camOffset;
+      const gy = groundHeight(wx);
+      if(sx === 0) ctx.moveTo(sx, gy); else ctx.lineTo(sx, gy);
+    }
+    ctx.stroke();
+  }
+
+  function drawWatcher(){
+    const carScreenX = W * CAR_SCREEN_X_RATIO;
+    const wx = carScreenX - watcherOffset;
+    if(wx < -40) return;
+    const wy = groundHeight(car.worldX - watcherOffset) - 20;
+    ctx.fillStyle = 'rgba(10,5,5,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(wx, wy, 15, 24, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath();
+    ctx.arc(wx + 4, wy - 6, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawCar(){
+    const carScreenX = W * CAR_SCREEN_X_RATIO;
+    ctx.save();
+    ctx.translate(carScreenX, car.y);
+    ctx.rotate(car.rotation * Math.PI/180);
+
+    // wheels
+    ctx.fillStyle = '#14100a';
+    ctx.beginPath(); ctx.arc(-CAR_W*0.32, CAR_H*0.5, WHEEL_R, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(CAR_W*0.32, CAR_H*0.5, WHEEL_R, 0, Math.PI*2); ctx.fill();
+
+    // body
+    ctx.fillStyle = '#ffd97a';
+    ctx.beginPath();
+    ctx.roundRect(-CAR_W/2, -CAR_H/2, CAR_W, CAR_H, 5);
+    ctx.fill();
+    ctx.fillStyle = '#0d0a04';
+    ctx.beginPath();
+    ctx.roundRect(-CAR_W*0.12, -CAR_H*0.9, CAR_W*0.42, CAR_H*0.6, 3);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function loop(now){
+    if(state !== 'playing') return;
+    if(lastTime === null) lastTime = now;
+    const dt = Math.min(now - lastTime, 40);
+    lastTime = now;
+
+    // horizontal speed
+    if(car.grounded){
+      if(holding) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
+      else car.speed = Math.max(MIN_SPEED, car.speed - FRICTION*dt);
+    }
+    const prevWorldX = car.worldX;
+    car.worldX += car.speed * dt;
+    score += car.speed * dt * SCORE_RATE;
+
+    const nextGroundY = groundHeight(car.worldX);
+
+    if(car.grounded){
+      // deliberate, guaranteed launch when crossing a ramp's peak —
+      // far more reliable than trying to infer a launch from how
+      // steeply the ground happens to be falling away that frame,
+      // which produced a stutter of tiny hops instead of one clean jump
+      const prevPhase = rampPhase(prevWorldX);
+      const currPhase = rampPhase(car.worldX);
+      const crossedPeak = prevPhase < RAMP_WIDTH*0.5 && currPhase >= RAMP_WIDTH*0.5 && currPhase < RAMP_WIDTH;
+      if(crossedPeak){
+        car.grounded = false;
+        car.vy = -(0.30 + car.speed*0.32);
+        flipAccum = 0;
+      } else {
+        car.y = nextGroundY;
+        car.vy = 0;
+        const targetAngle = slopeAngleAt(car.worldX);
+        car.rotation += (targetAngle - car.rotation) * Math.min(1, dt*0.02);
+      }
+    } else {
+      car.vy += GRAVITY*dt;
+      car.y += car.vy*dt;
+
+      if(holding){
+        const delta = FLIP_RATE*dt;
+        car.rotation += delta;
+        flipAccum += delta;
+        if(Math.floor(flipAccum/360) > flipCount){
+          flipCount = Math.floor(flipAccum/360);
+          score += FLIP_BONUS;
+        }
+      }
+
+      if(car.y >= nextGroundY){
+        const norm = ((car.rotation % 360) + 360) % 360;
+        const distFromUpright = Math.min(norm, 360-norm);
+        if(distFromUpright > SAFE_LANDING_ANGLE){
+          car.y = nextGroundY;
+          explode();
+          return;
+        } else {
+          car.y = nextGroundY;
+          car.vy = 0;
+          car.grounded = true;
+          car.rotation = slopeAngleAt(car.worldX);
+        }
+      }
+    }
+
+    watcherOffset = Math.max(140, 240 - score*0.01);
+    scoreEl.textContent = Math.floor(score);
+
+    drawBackground();
+    drawTerrain();
+    drawWatcher();
+    drawCar();
+
+    if(state === 'playing') requestAnimationFrame(loop);
+  }
+
+  function drawIdle(){
+    drawBackground();
+    drawTerrain();
+    drawWatcher();
+    drawCar();
+  }
+  drawIdle();
 })();
 
 // ---------- monster eye tracks your cursor / touch ----------
