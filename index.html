@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="intro-locked">
 <head>
 <meta charset="UTF-8" />
 <title>DON'T BLINK — VR Backrooms Horror Game | Viper Studios</title>
@@ -33,7 +33,11 @@
     margin: 0; background: var(--bg); color: var(--ink);
     font-family: var(--body); line-height: 1.6; overflow-x: hidden;
   }
-  body.intro-locked { overflow: hidden; height: 100vh; }
+  html.intro-locked { overflow: hidden; }
+  body.intro-locked {
+    overflow: hidden; height: 100%; position: fixed;
+    width: 100%; top: 0; left: 0;
+  }
   a { color: var(--amber); }
 
   ::selection { background: var(--amber); color: #1a1509; }
@@ -429,11 +433,11 @@
     <div class="team-grid">
       <div class="team-card">
         <div class="team-role">OWNER</div>
-        <div class="team-name">Jack</div>
+        <div class="team-name">Mango-Megaladon</div>
       </div>
       <div class="team-card">
         <div class="team-role">DEVELOPERS</div>
-        <div class="team-name">Add developer names here</div>
+        <div class="team-name">Icy — Builder</div>
       </div>
     </div>
   </div>
@@ -793,12 +797,15 @@ function reducedMotionActive(){
 
     setTimeout(()=>{
       intro.style.display = 'none';
+      document.documentElement.classList.remove('intro-locked');
       document.body.classList.remove('intro-locked');
       setTimeout(()=>{
         flash.classList.remove('flash');
       }, holdDuration);
     }, fadeDuration);
   });
+
+  intro.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, { passive: false });
 })();
 
 (function(){
