@@ -1192,7 +1192,8 @@ try {
   const FRICTION = 0.00030;
   const MAX_SPEED = 0.32;
   const MIN_SPEED = 0.15;
-  const FLIP_RATE = 0.38;          // degrees per ms while holding + airborne — tuned so the big jump comfortably allows a full flip
+  const FLIP_RATE = 0.38;          // degrees per ms while holding + airborne — regular jumps
+  const FLIP_RATE_BIG = 0.55;      // the big jump's arc is deliberately shorter to stay on-screen, so it spins a bit faster to still land a full flip
   const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
   const SCORE_RATE = 0.03;         // score per world-unit of progress
   const FLIP_BONUS = 150;
@@ -1207,13 +1208,13 @@ try {
   const RAMP_LEN = 140, LAND_LEN = 120;
   const BOOST_LEN = 60, BOOST_SET_SPEED = 0.62;
   const JUMP_VARIANTS = [
-    { gap: 110, recovery: 200 },
-    { gap: 150, recovery: 160 },
-    { gap: 90, recovery: 240 },
-    { gap: 170, recovery: 180 },
-    { gap: 120, recovery: 150 },
-    { gap: 135, recovery: 220 },
-    { gap: 240, recovery: 260, big: true }, // the big jump
+    { gap: 110, recovery: 200, rampHeight: 90 },
+    { gap: 150, recovery: 160, rampHeight: 90 },
+    { gap: 90, recovery: 240, rampHeight: 90 },
+    { gap: 170, recovery: 180, rampHeight: 90 },
+    { gap: 120, recovery: 150, rampHeight: 90 },
+    { gap: 135, recovery: 220, rampHeight: 90 },
+    { gap: 240, recovery: 260, big: true, rampHeight: 110 }, // the big jump — visibly taller ramp, still on-screen
   ];
   const zones = (function(){
     const list = [];
@@ -1226,7 +1227,7 @@ try {
       const landStart = gapStart + v.gap;
       const recoveryStart = landStart + LAND_LEN;
       const zoneEnd = recoveryStart + v.recovery;
-      list.push({ idx: i, boostStart, rampStart, gapStart, landStart, zoneEnd, big: !!v.big });
+      list.push({ idx: i, boostStart, rampStart, gapStart, landStart, zoneEnd, big: !!v.big, rampHeight: v.rampHeight });
       cursor = zoneEnd;
     });
     return list;
@@ -1281,7 +1282,7 @@ try {
     const rampLocal = local - z.rampStart;
     if(rampLocal < RAMP_LEN){
       const t = rampLocal/RAMP_LEN;
-      return baseline + rolling - Math.pow(t,1.6)*90;
+      return baseline + rolling - Math.pow(t,1.6)*z.rampHeight;
     }
     if(local < z.landStart) return H + 999; // the void — no ground here
     const landLocal = local - z.landStart;
@@ -1345,7 +1346,7 @@ try {
   function resetGame(){
     car = {
       worldX: 0, y: groundHeight(0) - WHEEL_BOTTOM_OFFSET, vy: 0,
-      rotation: 0, speed: MIN_SPEED, grounded: true, launchZone: null
+      rotation: 0, speed: MIN_SPEED, grounded: true, launchZone: null, launchedFromBig: false
     };
     watcherOffset = 240;
     score = 0;
@@ -1780,8 +1781,14 @@ try {
         const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
         if(enteringGap){
           car.grounded = false;
-          car.vy = -(0.20 + car.speed*2.1); // cut way down — jumps were launching off the top of the screen before
+          // the big jump uses a much higher boosted speed, so it needs
+          // its own gentler coefficient — the regular formula combined
+          // with that speed would send it flying off the top of the screen
+          car.vy = curInfo.z.big
+            ? -(0.20 + car.speed*1.0)
+            : -(0.20 + car.speed*2.1);
           car.launchZone = curInfo.globalIdx;
+          car.launchedFromBig = curInfo.z.big;
           flipAccum = 0;
           rotationTrail.length = 0;
         } else {
@@ -1798,7 +1805,7 @@ try {
         if(rotationTrail.length > 6) rotationTrail.shift();
 
         if(holding){
-          const delta = FLIP_RATE*dt;
+          const delta = (car.launchedFromBig ? FLIP_RATE_BIG : FLIP_RATE) * dt;
           car.rotation -= delta; // negative = backflip (front lifts first), not a front flip
           flipAccum += delta;
           if(Math.floor(flipAccum/360) > flipCount){
