@@ -101,6 +101,7 @@
     font-size: 12px; letter-spacing: 3px; color: var(--amber-dim);
     animation: bob 2.4s ease-in-out infinite; z-index: 2;
   }
+  .tap-cue.locked { animation: none; opacity: 0.5; }
   @keyframes bob { 0%,100%{ transform: translateX(-50%) translateY(0);} 50%{ transform: translateX(-50%) translateY(8px);} }
 
   /* ---------- main menu screen ---------- */
@@ -128,6 +129,19 @@
     padding: 22px 46px;
   }
   #menu .game-title { color: #fff; text-shadow: 0 0 24px rgba(255,255,255,0.35); }
+  .box-countdown {
+    margin-top: 10px; font-family: var(--body); font-weight: 700;
+    font-size: 15px; letter-spacing: 1px; color: #ff9a3d;
+    text-shadow: 0 0 10px rgba(255,154,61,0.5);
+  }
+  .box-progress {
+    margin-top: 8px; height: 4px; width: 100%; background: rgba(255,255,255,0.15);
+    border-radius: 2px; overflow: hidden;
+  }
+  .box-progress-fill {
+    height: 100%; width: 0%; background: #ff9a3d;
+    box-shadow: 0 0 8px rgba(255,154,61,0.6);
+  }
 
   /* ---------- nav buttons, spread around the edges ---------- */
   .menu-btn {
@@ -432,7 +446,7 @@
   <div class="content">
     <h1 class="game-title">THE UNSEEN</h1>
   </div>
-  <div class="tap-cue">TAP ANYWHERE TO CONTINUE</div>
+  <div class="tap-cue locked" id="introTapCue">FORMING...</div>
 </section>
 
 <section id="menu" style="background-image:url('menu_background.jpeg');">
@@ -451,6 +465,12 @@
     <div class="title-box">
       <div class="title-box-inner">
         <h1 class="game-title">THE UNSEEN</h1>
+        <div class="box-countdown">
+          <span id="menuCountdownTimer">--d --:--:--</span>
+        </div>
+        <div class="box-progress">
+          <div class="box-progress-fill" id="countdownProgress"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -797,6 +817,11 @@
 </footer>
 
 <script>
+// whether the intro's ASCII shape has finished forming — tap-to-continue
+// stays locked until this is true, shared across the animation IIFE
+// and the intro click handler below
+let introShapeReady = false;
+
 // shared check — respects both the OS-level setting and the manual
 // toggle in the settings panel, checked live rather than cached so
 // flipping the setting mid-session takes effect immediately
@@ -986,6 +1011,13 @@ function reducedMotionActive(){
     });
     if(!reducedMotionActive() && t < CONVERGE_MS){
       requestAnimationFrame(frame);
+    } else {
+      introShapeReady = true;
+      const cue = document.getElementById('introTapCue');
+      if(cue){
+        cue.textContent = 'TAP ANYWHERE TO CONTINUE';
+        cue.classList.remove('locked');
+      }
     }
   }
   requestAnimationFrame(frame);
@@ -1089,26 +1121,38 @@ setupExpandableList('#faqList');
 
 // ---------- countdown to the 2D game reveal — fixed target date, not
 // a relative "4 days from whenever you load the page" trick, so it
-// actually counts down to a real moment ----------
+// actually counts down to a real moment. Updates both the game
+// teaser's timer and the one inside the main menu's title box ----------
 (function(){
-  const timerEl = document.getElementById('countdownTimer');
-  if(!timerEl) return;
+  const timerEls = [
+    document.getElementById('countdownTimer'),
+    document.getElementById('menuCountdownTimer')
+  ].filter(Boolean);
+  const progressEl = document.getElementById('countdownProgress');
+  if(!timerEls.length && !progressEl) return;
   const target = new Date('2026-07-28T18:00:00Z').getTime();
+  const start = target - 4*24*60*60*1000; // countdown window started 4 days before target
 
   function tick(){
     const now = Date.now();
     const diff = target - now;
+    let text;
     if(diff <= 0){
-      timerEl.textContent = "IT'S HERE";
-      return;
+      text = "IT'S HERE";
+    } else {
+      const days = Math.floor(diff / 86400000);
+      const hours = Math.floor((diff % 86400000) / 3600000);
+      const mins = Math.floor((diff % 3600000) / 60000);
+      const secs = Math.floor((diff % 60000) / 1000);
+      const pad = n => String(n).padStart(2,'0');
+      text = `${days}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
     }
-    const days = Math.floor(diff / 86400000);
-    const hours = Math.floor((diff % 86400000) / 3600000);
-    const mins = Math.floor((diff % 3600000) / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
-    const pad = n => String(n).padStart(2,'0');
-    timerEl.textContent = `${days}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-    requestAnimationFrame(() => setTimeout(tick, 250));
+    timerEls.forEach(el => el.textContent = text);
+    if(progressEl){
+      const pct = Math.max(0, Math.min(100, ((now-start)/(target-start))*100));
+      progressEl.style.width = pct + '%';
+    }
+    if(diff > 0) requestAnimationFrame(() => setTimeout(tick, 250));
   }
   tick();
 })();
@@ -1510,6 +1554,7 @@ try {
   const reduceMotion = reducedMotionActive();
 
   function continueFromIntro(){
+    if(!introShapeReady) return; // shape still forming — tap does nothing yet
     const fadeDuration = reduceMotion ? 0 : 2600;
     const holdDuration = reduceMotion ? 0 : 1200;
 
