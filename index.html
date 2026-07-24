@@ -1190,7 +1190,7 @@ try {
   const GRAVITY = 0.0028;
   const ACCEL = 0.00055;
   const FRICTION = 0.00035;
-  const MAX_SPEED = 0.60;
+  const MAX_SPEED = 0.40;
   const MIN_SPEED = 0.15;
   const FLIP_RATE = 0.62;          // degrees per ms while holding + airborne
   const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
@@ -1230,6 +1230,15 @@ try {
   })();
   const CYCLE_LEN = zones[zones.length-1].zoneEnd;
 
+  // spinning saw hazard — floats in the air over the zone 1 gap, high
+  // enough that only a real burst of speed clears it. Simulated first:
+  // ~0.30 speed gives an arc that clears it, ~0.25 does not.
+  const SAW_ZONE_IDX = 1;
+  const SAW_LOCAL_X = (zones[SAW_ZONE_IDX].gapStart + zones[SAW_ZONE_IDX].landStart) / 2;
+  const SAW_HEIGHT_ABOVE_BASE = 210;
+  const SAW_RADIUS = 22;
+  let sawSpin = 0;
+
   function getZoneInfo(wx){
     const local = ((wx % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
     const cycleNum = Math.floor((wx - local) / CYCLE_LEN + 0.5);
@@ -1267,6 +1276,13 @@ try {
     const d = 5;
     const y1 = groundHeight(wx-d), y2 = groundHeight(wx+d);
     return Math.atan2(y2-y1, 2*d) * 180/Math.PI;
+  }
+
+  // the saw repeats once per cycle — find the copy of it nearest to
+  // wherever the car currently is
+  function nearestSawWorldX(carWorldX){
+    const cycleNum = Math.round((carWorldX - SAW_LOCAL_X) / CYCLE_LEN);
+    return cycleNum*CYCLE_LEN + SAW_LOCAL_X;
   }
 
   let state = 'ready'; // ready | playing | gameover
@@ -1464,6 +1480,46 @@ try {
     }
   }
 
+  function drawSaw(){
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    const sawWx = nearestSawWorldX(car.worldX);
+    const sx = sawWx - camOffset;
+    if(sx < -60 || sx > W+60) return; // off-screen, skip
+    const sy = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
+
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(sawSpin);
+
+    // jagged spiky circle — the "teeth"
+    ctx.fillStyle = '#ff3b3b';
+    ctx.beginPath();
+    const teeth = 12;
+    for(let i = 0; i <= teeth; i++){
+      const a = (i/teeth) * Math.PI*2;
+      const r = (i % 2 === 0) ? SAW_RADIUS : SAW_RADIUS*0.72;
+      const px = Math.cos(a)*r, py = Math.sin(a)*r;
+      if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // dark center hub
+    ctx.fillStyle = '#3a0a0a';
+    ctx.beginPath();
+    ctx.arc(0, 0, SAW_RADIUS*0.35, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
+
+    // glow ring, matches the reference's look
+    ctx.strokeStyle = 'rgba(255,59,59,0.3)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(sx, sy, SAW_RADIUS+8, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
   function drawWatcher(){
     const carScreenX = W * CAR_SCREEN_X_RATIO;
     const wx = carScreenX - watcherOffset;
@@ -1619,7 +1675,7 @@ try {
         const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
         if(enteringGap){
           car.grounded = false;
-          car.vy = -(0.28 + car.speed); // tuned so holding flat-out eventually overshoots
+          car.vy = -(0.28 + car.speed*3.0); // retuned for the lower top speed — still overshoots if held flat-out
           car.launchZone = curInfo.globalIdx;
           flipAccum = 0;
           rotationTrail.length = 0;
@@ -1649,7 +1705,12 @@ try {
 
         // fell past the bottom of the track without clearing the gap —
         // a real fail state, not just a bad landing
-        if(car.y > H + 60){
+        const sawWx = nearestSawWorldX(car.worldX);
+        const sawScreenY = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
+        const sawDist = Math.hypot(car.worldX - sawWx, car.y - sawScreenY);
+        if(sawDist < SAW_RADIUS + 14){
+          explode();
+        } else if(car.y > H + 60){
           explode();
         } else if(curInfo.globalIdx > car.launchZone){
           // still airborne but already flown past the zone this jump
@@ -1677,6 +1738,7 @@ try {
       // wheel spin rate tied to actual distance covered, so it always
       // matches how fast the bike is really moving
       wheelSpin += (car.speed * dt) / WHEEL_R;
+      sawSpin += dt * 0.003;
 
       const speedRatio = car.speed / MAX_SPEED;
       updateEngineSound(Math.max(0, Math.min(1, speedRatio)), car.grounded);
@@ -1687,6 +1749,7 @@ try {
     drawBackground();
     drawTerrain();
     drawRocks();
+    drawSaw();
     drawWatcher();
     drawSpeedLines();
     drawCar();
@@ -1700,6 +1763,7 @@ try {
     drawBackground();
     drawTerrain();
     drawRocks();
+    drawSaw();
     drawWatcher();
     drawCar();
   }
