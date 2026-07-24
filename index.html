@@ -1112,6 +1112,7 @@ try {
   let state = 'ready'; // ready | playing | gameover
   let holding = false;
   let car, watcherOffset, score, best, lastTime, flipAccum, flipCount;
+  let rotationTrail, particles, popups;
 
   function loadBest(){
     try { return parseInt(localStorage.getItem('theunseen_game_best') || '0', 10); } catch(e){ return 0; }
@@ -1132,8 +1133,26 @@ try {
     flipAccum = 0;
     flipCount = 0;
     lastTime = null;
+    rotationTrail = [];
+    particles = [];
+    popups = [];
   }
   resetGame();
+
+  function spawnPopup(text, x, y, color){
+    popups.push({ text, x, y, life: 900, maxLife: 900, color: color || '#ffd97a' });
+  }
+
+  function spawnBurst(x, y, color, count){
+    for(let i = 0; i < count; i++){
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.08 + Math.random()*0.18;
+      particles.push({
+        x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed - 0.05,
+        life: 500 + Math.random()*300, maxLife: 800, color, size: 2 + Math.random()*3
+      });
+    }
+  }
 
   function startOrRestart(){
     if(state === 'ready' || state === 'gameover'){
@@ -1169,6 +1188,9 @@ try {
       saveBest(best);
       bestEl.textContent = 'BEST: ' + best;
     }
+    const carScreenX = W * CAR_SCREEN_X_RATIO;
+    spawnBurst(carScreenX, car.y, '#ff8a3d', 22);
+    spawnBurst(carScreenX, car.y, '#ffd97a', 10);
     overlayTitle.textContent = 'DESTROYED';
     overlaySub.textContent = 'SCORE ' + finalScore + (flipCount ? ' · ' + flipCount + ' FLIPS' : '') + ' — HOLD TO RETRY';
     overlay.classList.remove('hidden');
@@ -1225,104 +1247,191 @@ try {
     ctx.fill();
   }
 
-  function drawCar(){
-    const carScreenX = W * CAR_SCREEN_X_RATIO;
+  function drawVehicleAt(x, y, rotation, alpha){
     ctx.save();
-    ctx.translate(carScreenX, car.y);
-    ctx.rotate(car.rotation * Math.PI/180);
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.rotate(rotation * Math.PI/180);
 
-    // wheels
+    // wheels — bike proportions, wider stance than a boxy car
     ctx.fillStyle = '#14100a';
-    ctx.beginPath(); ctx.arc(-CAR_W*0.32, CAR_H*0.5, WHEEL_R, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(CAR_W*0.32, CAR_H*0.5, WHEEL_R, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-CAR_W*0.4, CAR_H*0.55, WHEEL_R, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(CAR_W*0.4, CAR_H*0.55, WHEEL_R, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,217,122,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
 
-    // body
-    ctx.fillStyle = '#ffd97a';
+    // thin frame connecting the wheels
+    ctx.strokeStyle = '#ffd97a';
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.rect(-CAR_W/2, -CAR_H/2, CAR_W, CAR_H);
-    ctx.fill();
+    ctx.moveTo(-CAR_W*0.4, CAR_H*0.35);
+    ctx.lineTo(0, -CAR_H*0.15);
+    ctx.lineTo(CAR_W*0.4, CAR_H*0.35);
+    ctx.stroke();
+
+    // rider, hunched forward over the frame
     ctx.fillStyle = '#0d0a04';
     ctx.beginPath();
-    ctx.rect(-CAR_W*0.12, -CAR_H*0.9, CAR_W*0.42, CAR_H*0.6);
+    ctx.ellipse(-CAR_W*0.02, -CAR_H*0.55, CAR_W*0.16, CAR_H*0.42, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(CAR_W*0.14, -CAR_H*0.95, CAR_H*0.22, 0, Math.PI*2);
     ctx.fill();
 
     ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCar(){
+    const carScreenX = W * CAR_SCREEN_X_RATIO;
+
+    // ghost trail while airborne — the signature "you can see the flip
+    // happening" look, a few faded copies of the bike at recent angles
+    if(!car.grounded && rotationTrail.length > 1){
+      rotationTrail.forEach((r, i)=>{
+        const alpha = (i / rotationTrail.length) * 0.22;
+        drawVehicleAt(carScreenX, car.y, r, alpha);
+      });
+    }
+
+    drawVehicleAt(carScreenX, car.y, car.rotation, 1);
+  }
+
+  function updateEffects(dt){
+    for(let i = particles.length-1; i>=0; i--){
+      const p = particles[i];
+      p.life -= dt;
+      if(p.life <= 0){ particles.splice(i,1); continue; }
+      p.x += p.vx*dt; p.y += p.vy*dt; p.vy += GRAVITY*0.5*dt;
+    }
+    for(let i = popups.length-1; i>=0; i--){
+      const p = popups[i];
+      p.life -= dt;
+      if(p.life <= 0){ popups.splice(i,1); continue; }
+      p.y -= dt*0.03;
+    }
+  }
+
+  function drawParticles(){
+    particles.forEach(p=>{
+      const a = Math.max(0, p.life/p.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPopups(){
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px "JetBrains Mono", monospace';
+    popups.forEach(p=>{
+      const a = Math.max(0, p.life/p.maxLife);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function drawSpeedLines(){
+    if(!car.grounded || car.speed < MAX_SPEED*0.7) return;
+    const carScreenX = W * CAR_SCREEN_X_RATIO;
+    ctx.strokeStyle = 'rgba(255,217,122,0.25)';
+    ctx.lineWidth = 2;
+    for(let i = 0; i < 3; i++){
+      const lx = carScreenX - 30 - i*14 - Math.random()*10;
+      const ly = car.y - 4 + Math.random()*16;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.lineTo(lx - 12, ly);
+      ctx.stroke();
+    }
   }
 
   function loop(now){
-    if(state !== 'playing') return;
+    if(state !== 'playing' && particles.length === 0 && popups.length === 0) return;
     if(lastTime === null) lastTime = now;
     const dt = Math.min(now - lastTime, 40);
     lastTime = now;
 
-    // horizontal speed
-    if(car.grounded){
-      if(holding) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
-      else car.speed = Math.max(MIN_SPEED, car.speed - FRICTION*dt);
-    }
-    const prevWorldX = car.worldX;
-    car.worldX += car.speed * dt;
-    score += car.speed * dt * SCORE_RATE;
-
-    const nextGroundY = groundHeight(car.worldX);
-
-    if(car.grounded){
-      // deliberate, guaranteed launch when crossing a ramp's peak —
-      // far more reliable than trying to infer a launch from how
-      // steeply the ground happens to be falling away that frame,
-      // which produced a stutter of tiny hops instead of one clean jump
-      const prevPhase = rampPhase(prevWorldX);
-      const currPhase = rampPhase(car.worldX);
-      const crossedPeak = prevPhase < RAMP_WIDTH*0.5 && currPhase >= RAMP_WIDTH*0.5 && currPhase < RAMP_WIDTH;
-      if(crossedPeak){
-        car.grounded = false;
-        car.vy = -(0.30 + car.speed*0.32);
-        flipAccum = 0;
-      } else {
-        car.y = nextGroundY;
-        car.vy = 0;
-        const targetAngle = slopeAngleAt(car.worldX);
-        car.rotation += (targetAngle - car.rotation) * Math.min(1, dt*0.02);
+    if(state === 'playing'){
+      // horizontal speed
+      if(car.grounded){
+        if(holding) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
+        else car.speed = Math.max(MIN_SPEED, car.speed - FRICTION*dt);
       }
-    } else {
-      car.vy += GRAVITY*dt;
-      car.y += car.vy*dt;
+      const prevWorldX = car.worldX;
+      car.worldX += car.speed * dt;
+      score += car.speed * dt * SCORE_RATE;
 
-      if(holding){
-        const delta = FLIP_RATE*dt;
-        car.rotation += delta;
-        flipAccum += delta;
-        if(Math.floor(flipAccum/360) > flipCount){
-          flipCount = Math.floor(flipAccum/360);
-          score += FLIP_BONUS;
-        }
-      }
+      const nextGroundY = groundHeight(car.worldX);
 
-      if(car.y >= nextGroundY){
-        const norm = ((car.rotation % 360) + 360) % 360;
-        const distFromUpright = Math.min(norm, 360-norm);
-        if(distFromUpright > SAFE_LANDING_ANGLE){
-          car.y = nextGroundY;
-          explode();
-          return;
+      if(car.grounded){
+        const prevPhase = rampPhase(prevWorldX);
+        const currPhase = rampPhase(car.worldX);
+        const crossedPeak = prevPhase < RAMP_WIDTH*0.5 && currPhase >= RAMP_WIDTH*0.5 && currPhase < RAMP_WIDTH;
+        if(crossedPeak){
+          car.grounded = false;
+          car.vy = -(0.30 + car.speed*0.32);
+          flipAccum = 0;
+          rotationTrail.length = 0;
         } else {
           car.y = nextGroundY;
           car.vy = 0;
-          car.grounded = true;
-          car.rotation = slopeAngleAt(car.worldX);
+          const targetAngle = slopeAngleAt(car.worldX);
+          car.rotation += (targetAngle - car.rotation) * Math.min(1, dt*0.02);
+        }
+      } else {
+        car.vy += GRAVITY*dt;
+        car.y += car.vy*dt;
+
+        rotationTrail.push(car.rotation);
+        if(rotationTrail.length > 6) rotationTrail.shift();
+
+        if(holding){
+          const delta = FLIP_RATE*dt;
+          car.rotation += delta;
+          flipAccum += delta;
+          if(Math.floor(flipAccum/360) > flipCount){
+            flipCount = Math.floor(flipAccum/360);
+            score += FLIP_BONUS;
+            spawnPopup('+' + FLIP_BONUS + ' FLIP!', W*CAR_SCREEN_X_RATIO, car.y - 30, '#ffd97a');
+          }
+        }
+
+        if(car.y >= nextGroundY){
+          const norm = ((car.rotation % 360) + 360) % 360;
+          const distFromUpright = Math.min(norm, 360-norm);
+          car.y = nextGroundY;
+          if(distFromUpright > SAFE_LANDING_ANGLE){
+            explode();
+          } else {
+            car.vy = 0;
+            car.grounded = true;
+            car.rotation = slopeAngleAt(car.worldX);
+            rotationTrail.length = 0;
+          }
         }
       }
+
+      watcherOffset = Math.max(140, 240 - score*0.01);
+      scoreEl.textContent = Math.floor(score);
     }
 
-    watcherOffset = Math.max(140, 240 - score*0.01);
-    scoreEl.textContent = Math.floor(score);
+    updateEffects(dt);
 
     drawBackground();
     drawTerrain();
     drawWatcher();
+    drawSpeedLines();
     drawCar();
+    drawParticles();
+    drawPopups();
 
-    if(state === 'playing') requestAnimationFrame(loop);
+    requestAnimationFrame(loop);
   }
 
   function drawIdle(){
