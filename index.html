@@ -242,6 +242,23 @@
     aspect-ratio: 16/8; max-width: 100%;
     user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
+  .countdown-block {
+    position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: #0d0a04;
+  }
+  .countdown-block::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 40%, rgba(255,184,77,0.1), transparent 65%);
+  }
+  .countdown-label, .countdown-timer { position: relative; z-index: 1; }
+  .countdown-label {
+    font-size: 12px; letter-spacing: 3px; color: var(--amber-faint); margin-bottom: 14px;
+  }
+  .countdown-timer {
+    font-family: var(--display); font-size: clamp(28px, 7vw, 48px); font-weight: 700;
+    color: var(--amber); letter-spacing: 2px; text-shadow: 0 0 20px rgba(255,184,77,0.4);
+  }
   #gameCanvas { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
   .game-hud {
     position: absolute; top: 10px; left: 12px; right: 12px; height: 34px; z-index: 3;
@@ -517,10 +534,10 @@
 
 <section id="play" class="reveal">
   <div class="wrap">
-    <div class="eyebrow">WHILE YOU WAIT</div>
-    <h2 class="section-title">Something to actually play right now</h2>
-    <p>The real game needs a headset. This doesn't. Hold to drive, hold in the air to flip — land it clean or it's over.</p>
-    <div class="game-frame">
+    <div class="eyebrow">COMING SOON</div>
+    <h2 class="section-title">2D GAME COMING SOON</h2>
+    <p style="font-size:13px;max-width:520px;">We're about to prove exactly what this team can build. A real, playable game — made entirely by the developers behind THE UNSEEN — is landing here soon. Consider it proof of what to expect when the real thing launches.</p>
+    <div class="game-frame" id="gameCanvasFrame">
       <canvas id="gameCanvas"></canvas>
       <div class="game-hud">
         <span id="gameScore">0</span>
@@ -528,12 +545,14 @@
       </div>
       <div id="gameOverlay" class="game-overlay">
         <div class="game-stats-row" id="gameStatsRow"></div>
-        <div class="game-overlay-title" id="gameOverlayTitle">DRIVE</div>
-        <div class="game-overlay-sub" id="gameOverlaySub">HOLD TO ACCELERATE — HOLD IN THE AIR TO FLIP</div>
+        <div class="game-overlay-title" id="gameOverlayTitle">RUN</div>
+        <div class="game-overlay-sub" id="gameOverlaySub">TAP LEFT OR RIGHT TO DODGE</div>
       </div>
-      <audio id="driveMusic" src="drive music.wav" loop preload="auto"></audio>
+      <div class="countdown-block" id="teaserOverlay">
+        <div class="countdown-label">REVEALS IN</div>
+        <div class="countdown-timer" id="countdownTimer">--:--:--:--</div>
+      </div>
     </div>
-    <div class="hint-tap">HOLD TO DRIVE · HOLD WHILE AIRBORNE TO FLIP · LAND UPRIGHT OR EXPLODE</div>
   </div>
 </section>
 
@@ -1068,7 +1087,35 @@ setupExpandableList('#faqList');
   });
 })();
 
-// ---------- mini-game: hill-racer with flips, styled to match the real game ----------
+// ---------- countdown to the 2D game reveal — fixed target date, not
+// a relative "4 days from whenever you load the page" trick, so it
+// actually counts down to a real moment ----------
+(function(){
+  const timerEl = document.getElementById('countdownTimer');
+  if(!timerEl) return;
+  const target = new Date('2026-07-28T18:00:00Z').getTime();
+
+  function tick(){
+    const now = Date.now();
+    const diff = target - now;
+    if(diff <= 0){
+      timerEl.textContent = "IT'S HERE";
+      return;
+    }
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+    const pad = n => String(n).padStart(2,'0');
+    timerEl.textContent = `${days}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+    requestAnimationFrame(() => setTimeout(tick, 250));
+  }
+  tick();
+})();
+
+// ---------- mini-game: THE CHASE — dodge through the backrooms while
+// The Watcher closes in behind you. Built to actually preview the real
+// game's push-based-movement-vs-a-hunting-monster hook ----------
 (function(){
 try {
   const canvas = document.getElementById('gameCanvas');
@@ -1081,7 +1128,6 @@ try {
   const scoreEl = document.getElementById('gameScore');
   const bestEl = document.getElementById('gameBest');
   const frame = canvas.closest('.game-frame');
-  const driveMusic = document.getElementById('driveMusic');
   const menuMusic = document.getElementById('menuMusic');
 
   let W, H, dpr;
@@ -1095,285 +1141,115 @@ try {
   resize();
   window.addEventListener('resize', resize);
 
-  // ---- live engine sound, synthesized rather than a static file so its
-  // pitch/volume can react to speed in real time ----
-  let audioCtx, engineOsc, engineGain, engineFilter;
-  function ensureEngineAudio(){
+  // ---- tunables — tested via simulation before tuning: a player who
+  // never misses a dodge survives indefinitely, ~15% miss rate still
+  // survives comfortably, ~35% miss rate gets caught at a fair point
+  // rather than instantly or never ----
+  const LANE_COUNT = 3;
+  const BASE_SPAWN_MS = 900;
+  const MIN_SPAWN_MS = 420;
+  const SPAWN_RAMP = 3;
+  const HIT_METER_GAIN = 22;
+  const DODGE_METER_LOSS = 1.5;
+  const METER_CREEP_PER_MS = 0.0006;
+  const SCORE_RATE = 0.01;
+  const INVULN_MS = 500;
+
+  // ---- tension audio: a low pulsing heartbeat that speeds up as the
+  // watcher meter fills, synthesized live so no extra file is needed
+  let audioCtx;
+  function ensureAudio(){
     if(audioCtx) return;
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      engineOsc = audioCtx.createOscillator();
-      engineOsc.type = 'sawtooth';
-      engineFilter = audioCtx.createBiquadFilter();
-      engineFilter.type = 'lowpass';
-      engineFilter.frequency.value = 400;
-      engineGain = audioCtx.createGain();
-      engineGain.gain.value = 0;
-      engineOsc.connect(engineFilter);
-      engineFilter.connect(engineGain);
-      engineGain.connect(audioCtx.destination);
-      engineOsc.frequency.value = 60;
-      engineOsc.start();
-    } catch(e){ /* Web Audio unavailable — game still works without engine sound */ }
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ /* audio unavailable — game still works without it */ }
   }
-  function updateEngineSound(speedRatio, active){
-    if(!engineOsc) return;
-    const targetFreq = 55 + speedRatio * 140;
-    const targetGain = active ? 0.05 + speedRatio * 0.05 : 0;
-    engineOsc.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.05);
-    engineGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
-  }
-  function stopEngineSound(){
-    if(engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
-  }
-
-  function playExplosionSound(){
+  let lastBeatAt = 0;
+  function maybePulseHeartbeat(now, meter){
     if(!audioCtx) return;
-    try {
-      const t0 = audioCtx.currentTime;
-
-      // noise burst — the "crunch"
-      const bufferSize = Math.floor(audioCtx.sampleRate * 0.4);
-      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for(let i=0; i<bufferSize; i++){
-        data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufferSize, 2);
-      }
-      const noise = audioCtx.createBufferSource();
-      noise.buffer = buffer;
-      const noiseFilter = audioCtx.createBiquadFilter();
-      noiseFilter.type = 'lowpass';
-      noiseFilter.frequency.value = 1400;
-      const noiseGain = audioCtx.createGain();
-      noiseGain.gain.setValueAtTime(0.55, t0);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, t0+0.4);
-      noise.connect(noiseFilter);
-      noiseFilter.connect(noiseGain);
-      noiseGain.connect(audioCtx.destination);
-      noise.start(t0);
-
-      // low thump underneath — the "impact"
-      const osc = audioCtx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(130, t0);
-      osc.frequency.exponentialRampToValueAtTime(35, t0+0.3);
-      const oscGain = audioCtx.createGain();
-      oscGain.gain.setValueAtTime(0.6, t0);
-      oscGain.gain.exponentialRampToValueAtTime(0.001, t0+0.35);
-      osc.connect(oscGain);
-      oscGain.connect(audioCtx.destination);
-      osc.start(t0);
-      osc.stop(t0+0.4);
-    } catch(e){ /* audio unavailable, game still works */ }
+    const interval = Math.max(280, 900 - meter*5.5);
+    if(now - lastBeatAt < interval) return;
+    lastBeatAt = now;
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(60, t0);
+    osc.frequency.exponentialRampToValueAtTime(40, t0+0.15);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.18 + meter*0.003, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+0.18);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0+0.2);
+  }
+  function playHitSound(){
+    if(!audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    const noise = audioCtx.createBufferSource();
+    const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate*0.2), audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/d.length,2);
+    noise.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.4, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+0.2);
+    noise.connect(g); g.connect(audioCtx.destination);
+    noise.start(t0);
+  }
+  function playCaughtSound(){
+    if(!audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(300, t0);
+    osc.frequency.exponentialRampToValueAtTime(40, t0+0.6);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0+0.65);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0+0.7);
   }
 
-  function switchToDriveMusic(){
-    if(menuMusic){
-      menuMusic.volume = Math.max(0, menuMusic.volume - 0.25) || 0.08;
-    }
-    if(driveMusic){
-      driveMusic.volume = 0.32;
-      driveMusic.currentTime = 0;
-      driveMusic.play().catch(()=>{});
-    }
-  }
-  function switchToMenuMusic(){
-    if(driveMusic){
-      driveMusic.pause();
-    }
-    if(menuMusic && !document.body.classList.contains('music-off')){
-      menuMusic.volume = 0.35;
-    }
-  }
-
-  // ---- tunables ----
-  const GRAVITY = 0.0028;
-  const ACCEL = 0.00045;
-  const FRICTION = 0.00030;
-  const MAX_SPEED = 0.32;
-  const MIN_SPEED = 0.15;
-  const FLIP_RATE = 0.42;          // degrees per ms while holding + airborne — regular jumps, nudged up to make a full spin more achievable
-  const FLIP_RATE_BIG = 0.55;      // the big jump's arc is deliberately shorter to stay on-screen, so it spins a bit faster to still land a full flip
-  const SAFE_LANDING_ANGLE = 120;  // now only a genuinely upside-down-ish landing is fatal — the old 55deg left almost no margin since the ramps themselves launch you at ~45deg
-  const SCORE_RATE = 0.03;         // score per world-unit of progress
-  const FLIP_BONUS = 150;
-  const CAR_SCREEN_X_RATIO = 0.28;
-  const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
-  const WHEEL_BOTTOM_OFFSET = CAR_H*0.55 + WHEEL_R; // how far below car.y the wheel-bottoms actually sit
-
-  // real gap-jumps with genuine variety, plus one big jump with a boost
-  // pad right before it. Jump heights were cut way down from an earlier
-  // version that was launching cars off the top of the screen — gaps
-  // were shrunk to match so they're still fair at the lower arc height
-  const RAMP_LEN = 140, LAND_LEN = 120;
-  const BOOST_LEN = 60, BOOST_SET_SPEED = 0.62;
-  const JUMP_VARIANTS = [
-    { gap: 110, recovery: 200, rampHeight: 90 },
-    { gap: 150, recovery: 160, rampHeight: 90 },
-    { gap: 90, recovery: 240, rampHeight: 90 },
-    { gap: 170, recovery: 180, rampHeight: 90 },
-    { gap: 120, recovery: 150, rampHeight: 90 },
-    { gap: 135, recovery: 220, rampHeight: 90 },
-    { gap: 240, recovery: 260, big: true, rampHeight: 110 }, // the big jump — visibly taller ramp, still on-screen
-  ];
-  const zones = (function(){
-    const list = [];
-    let cursor = 280;
-    JUMP_VARIANTS.forEach((v, i) => {
-      let rampStart = cursor;
-      let boostStart = null;
-      if(v.big){ boostStart = rampStart; rampStart = boostStart + BOOST_LEN; }
-      const gapStart = rampStart + RAMP_LEN;
-      const landStart = gapStart + v.gap;
-      const recoveryStart = landStart + LAND_LEN;
-      const zoneEnd = recoveryStart + v.recovery;
-      list.push({ idx: i, boostStart, rampStart, gapStart, landStart, zoneEnd, big: !!v.big, rampHeight: v.rampHeight });
-      cursor = zoneEnd;
-    });
-    return list;
-  })();
-  const CYCLE_LEN = zones[zones.length-1].zoneEnd;
-
-  // spinning saw hazard — bigger now, so it needed a wider gap (zone 3)
-  // to actually be clearable, and a much lower height to match the
-  // reduced jump arcs
-  const SAW_ZONE_IDX = 3;
-  const SAW_LOCAL_X = (zones[SAW_ZONE_IDX].gapStart + zones[SAW_ZONE_IDX].landStart) / 2;
-  const SAW_HEIGHT_ABOVE_BASE = 40;
-  const SAW_RADIUS = 32;
-  let sawSpin = 0;
-
-  // second hazard — a saw that moves up and down over time (not fixed
-  // like the first one). Positioned on zone 5's gap. If it's in its
-  // "high" position and you're still high in your jump when you reach
-  // it, you hit it — you need to already be descending by then.
-  const SAW2_ZONE_IDX = 5;
-  const SAW2_LOCAL_X = (zones[SAW2_ZONE_IDX].gapStart + zones[SAW2_ZONE_IDX].landStart) / 2;
-  const SAW2_RADIUS = 26;
-  let gameTime = 0;
-  function saw2HeightAt(t){
-    // oscillates between ~25 and ~150 above baseline, roughly a 2.6s cycle
-    return 87 + Math.sin(t * 0.0024) * 63;
-  }
-
-  function getZoneInfo(wx){
-    const local = ((wx % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
-    const cycleNum = Math.floor((wx - local) / CYCLE_LEN + 0.5);
-    for(const z of zones){
-      if(local < z.zoneEnd) return { z, local, globalIdx: cycleNum*zones.length + z.idx };
-    }
-    const last = zones[zones.length-1];
-    return { z: last, local, globalIdx: cycleNum*zones.length + last.idx };
-  }
-  function isGap(wx){
-    const { z, local } = getZoneInfo(wx);
-    return local >= z.gapStart && local < z.landStart;
-  }
-  function isBoost(wx){
-    const { z, local } = getZoneInfo(wx);
-    return z.boostStart !== null && local >= z.boostStart && local < z.rampStart;
-  }
-  function groundHeight(wx){
-    const baseline = H * 0.6;
-    const { z, local } = getZoneInfo(wx);
-    const rolling = Math.sin(wx*0.006)*14 + Math.sin(wx*0.014+1.3)*8;
-
-    if(local < z.rampStart) return baseline + rolling;
-    const rampLocal = local - z.rampStart;
-    if(rampLocal < RAMP_LEN){
-      const t = rampLocal/RAMP_LEN;
-      return baseline + rolling - Math.pow(t,1.6)*z.rampHeight;
-    }
-    if(local < z.landStart) return H + 999; // the void — no ground here
-    const landLocal = local - z.landStart;
-    if(landLocal < LAND_LEN){
-      const t = landLocal/LAND_LEN;
-      return baseline + rolling - (1-t)*70;
-    }
-    return baseline + rolling;
-  }
-  function slopeAngleAt(wx){
-    if(isGap(wx-5) || isGap(wx+5)) return 0;
-    const d = 5;
-    const y1 = groundHeight(wx-d), y2 = groundHeight(wx+d);
-    return Math.atan2(y2-y1, 2*d) * 180/Math.PI;
-  }
-
-  // the saw repeats once per cycle — find the copy of it nearest to
-  // wherever the car currently is
-  function nearestWorldX(carWorldX, localX){
-    const cycleNum = Math.round((carWorldX - localX) / CYCLE_LEN);
-    return cycleNum*CYCLE_LEN + localX;
-  }
-
-  let state = 'ready'; // ready | playing | gameover
-  let holding = false;
-  let car, watcherOffset, score, best, lastTime, flipAccum, flipCount, wheelSpin;
-  let rotationTrail, particles, popups;
+  let state = 'ready';
+  let player, obstacles, watcherMeter, score, best, lastTime, nextSpawnAt, particles, popups, shakeTime, invulnUntil;
 
   function loadBest(){
-    try { return parseInt(localStorage.getItem('theunseen_game_best') || '0', 10); } catch(e){ return 0; }
+    try { return parseInt(localStorage.getItem('theunseen_chase_best') || '0', 10); } catch(e){ return 0; }
   }
   function saveBest(v){
-    try { localStorage.setItem('theunseen_game_best', String(v)); } catch(e){}
+    try { localStorage.setItem('theunseen_chase_best', String(v)); } catch(e){}
   }
   best = loadBest();
   bestEl.textContent = 'BEST: ' + best;
 
-  // rank and challenge are both based on the player's own history only —
-  // there's no real player base to compare against yet, so nothing here
-  // claims a percentile or ranking against other people
   function computeRank(bestScore){
-    if(bestScore >= 500) return 'ELITE';
-    if(bestScore >= 250) return 'SKILLED';
-    if(bestScore >= 100) return 'RISING';
+    if(bestScore >= 400) return 'ELITE';
+    if(bestScore >= 200) return 'SKILLED';
+    if(bestScore >= 80) return 'RISING';
     return 'ROOKIE';
   }
-  function challengeText(bestScore){
-    if(bestScore === 0) return 'SCORE YOUR FIRST 50';
-    return 'BEAT ' + bestScore;
-  }
-
   function renderReadyStats(){
     statsRow.innerHTML =
       '<div class="stat"><span class="stat-label">RANK</span><span class="stat-value">' + computeRank(best) + '</span></div>' +
-      '<div class="stat"><span class="stat-label">HIGH SCORE</span><span class="stat-value">' + best + '</span></div>' +
-      '<div class="stat"><span class="stat-label">VEHICLE</span><span class="stat-value">STANDARD</span></div>' +
-      '<div class="stat"><span class="stat-label">CHALLENGE</span><span class="stat-value">' + challengeText(best) + '</span></div>';
+      '<div class="stat"><span class="stat-label">HIGH SCORE</span><span class="stat-value">' + best + '</span></div>';
   }
   renderReadyStats();
 
+  function laneX(lane){
+    return (lane + 0.5) * (W / LANE_COUNT);
+  }
+
   function resetGame(){
-    car = {
-      worldX: 0, y: groundHeight(0) - WHEEL_BOTTOM_OFFSET, vy: 0,
-      rotation: 0, speed: MIN_SPEED, grounded: true, launchZone: null, launchedFromBig: false
-    };
-    watcherOffset = 240;
+    player = { lane: 1 };
+    obstacles = [];
+    watcherMeter = 0;
     score = 0;
-    flipAccum = 0;
-    flipCount = 0;
     lastTime = null;
-    rotationTrail = [];
-    wheelSpin = 0;
+    nextSpawnAt = 0;
     particles = [];
     popups = [];
+    shakeTime = 0;
+    invulnUntil = 0;
   }
   resetGame();
-
-  function spawnPopup(text, x, y, color){
-    popups.push({ text, x, y, life: 900, maxLife: 900, color: color || '#ffd97a' });
-  }
-
-  function spawnBurst(x, y, color, count){
-    for(let i = 0; i < count; i++){
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 0.08 + Math.random()*0.18;
-      particles.push({
-        x, y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed - 0.05,
-        life: 500 + Math.random()*300, maxLife: 800, color, size: 2 + Math.random()*3
-      });
-    }
-  }
 
   function startOrRestart(){
     if(state === 'ready' || state === 'gameover'){
@@ -1382,512 +1258,204 @@ try {
       overlay.classList.add('hidden');
       overlay.classList.remove('crashed');
       statsRow.innerHTML = '';
-      ensureEngineAudio();
-      switchToDriveMusic();
+      ensureAudio();
+      if(menuMusic){ menuMusic.volume = Math.max(0.08, menuMusic.volume*0.4); }
       requestAnimationFrame(loop);
     }
   }
 
-  function setHolding(v){
-    holding = v;
+  function moveLane(dir){
+    if(state !== 'playing') return;
+    player.lane = Math.max(0, Math.min(LANE_COUNT-1, player.lane + dir));
   }
 
-  canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startOrRestart(); setHolding(true); });
-  window.addEventListener('pointerup', ()=> setHolding(false));
-  overlay.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startOrRestart(); setHolding(true); });
-  window.addEventListener('keydown', (e)=>{
-    if(e.code !== 'Space') return;
+  canvas.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
-    startOrRestart();
-    setHolding(true);
+    if(state !== 'playing'){ startOrRestart(); return; }
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    moveLane(px < rect.width/2 ? -1 : 1);
   });
-  window.addEventListener('keyup', (e)=>{
-    if(e.code === 'Space') setHolding(false);
+  overlay.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startOrRestart(); });
+  window.addEventListener('keydown', (e)=>{
+    if(e.code === 'ArrowLeft'){ if(state!=='playing') startOrRestart(); else moveLane(-1); }
+    if(e.code === 'ArrowRight'){ if(state!=='playing') startOrRestart(); else moveLane(1); }
+    if(e.code === 'Space' && state !== 'playing'){ e.preventDefault(); startOrRestart(); }
   });
 
-  function explode(){
+  function spawnPopup(text, x, y, color){
+    popups.push({ text, x, y, life: 800, maxLife: 800, color: color||'#ffd97a' });
+  }
+  function spawnBurst(x, y, color, count){
+    for(let i=0;i<count;i++){
+      const a = Math.random()*Math.PI*2, sp = 0.05+Math.random()*0.15;
+      particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 400+Math.random()*300, maxLife: 700, color, size: 2+Math.random()*3 });
+    }
+  }
+
+  function caught(){
     state = 'gameover';
+    playCaughtSound();
     const finalScore = Math.floor(score);
     let isNewBest = false;
-    if(finalScore > best){
-      best = finalScore;
-      saveBest(best);
-      bestEl.textContent = 'BEST: ' + best;
-      isNewBest = true;
-    }
-    const carScreenX = W * CAR_SCREEN_X_RATIO;
-    spawnBurst(carScreenX, car.y, '#ff8a3d', 22);
-    spawnBurst(carScreenX, car.y, '#ffd97a', 10);
-    switchToMenuMusic();
-    stopEngineSound();
-    playExplosionSound();
+    if(finalScore > best){ best = finalScore; saveBest(best); bestEl.textContent = 'BEST: '+best; isNewBest = true; }
+    spawnBurst(laneX(player.lane), H*0.8, '#ff3b3b', 26);
     overlay.classList.add('crashed');
     setTimeout(()=> overlay.classList.remove('crashed'), 500);
-    overlayTitle.textContent = 'DESTROYED';
-    overlaySub.textContent = 'SCORE ' + finalScore + (flipCount ? ' · ' + flipCount + ' FLIPS' : '') + ' — HOLD TO RETRY';
+    overlayTitle.textContent = 'CAUGHT';
+    overlaySub.textContent = 'SCORE ' + finalScore + ' — TAP TO RETRY';
     statsRow.innerHTML = isNewBest ? '<div class="new-best-tag">NEW BEST!</div>' : '';
     overlay.classList.remove('hidden');
+    if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
   }
 
   function drawBackground(){
     ctx.fillStyle = '#0d0a04';
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,217,122,0.06)';
-    ctx.lineWidth = 1;
-    const spacing = 70;
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    const seamShift = camOffset % spacing;
-    for(let x = -seamShift; x < W; x += spacing){
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H*0.35); ctx.stroke();
-    }
-  }
-
-  function drawTerrain(){
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    ctx.beginPath();
-    ctx.moveTo(0, H);
-    for(let sx = 0; sx <= W; sx += 6){
-      const wx = sx + camOffset;
-      ctx.lineTo(sx, groundHeight(wx));
-    }
-    ctx.lineTo(W, H);
-    ctx.closePath();
-    ctx.fillStyle = '#3a3010';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,184,77,0.35)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#1c1508';
+    ctx.fillRect(0,0,W*0.08,H);
+    ctx.fillRect(W*0.92,0,W*0.08,H);
+    ctx.strokeStyle = 'rgba(255,184,77,0.15)';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    for(let sx = 0; sx <= W; sx += 6){
-      const wx = sx + camOffset;
-      const gy = groundHeight(wx);
-      if(sx === 0) ctx.moveTo(sx, gy); else ctx.lineTo(sx, gy);
-    }
-    ctx.stroke();
-  }
-
-  // boost pad — glowing strip with forward chevrons right before the
-  // big jump, so it's obvious there's a speed boost there
-  const boostZoneDef = zones.find(z => z.boostStart !== null);
-  function drawBoostPad(){
-    if(!boostZoneDef) return;
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    const zoneMid = (boostZoneDef.boostStart + boostZoneDef.rampStart) / 2;
-    const cycleNum = Math.round((car.worldX - zoneMid) / CYCLE_LEN);
-    const wStart = cycleNum*CYCLE_LEN + boostZoneDef.boostStart;
-    const wEnd = cycleNum*CYCLE_LEN + boostZoneDef.rampStart;
-    const sx0 = wStart - camOffset, sx1 = wEnd - camOffset;
-    if(sx1 < -20 || sx0 > W+20) return;
-
-    const gy = groundHeight(wStart);
-    ctx.fillStyle = 'rgba(80,200,255,0.28)';
-    ctx.fillRect(sx0, gy-4, sx1-sx0, 8);
-
-    ctx.strokeStyle = '#50c8ff';
-    ctx.lineWidth = 3;
-    for(let i = 0; i < 3; i++){
-      const ax = sx0 + (sx1-sx0) * (i+0.5)/3;
-      ctx.beginPath();
-      ctx.moveTo(ax-8, gy-14);
-      ctx.lineTo(ax+5, gy-8);
-      ctx.lineTo(ax-8, gy-2);
-      ctx.stroke();
+    for(let i=1;i<LANE_COUNT;i++){
+      const x = W*0.08 + (W*0.84)*(i/LANE_COUNT);
+      ctx.setLineDash([14,16]);
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
-  // jagged rocks filling the gap — falling in is fatal no matter which
-  // way up the bike is, this is just what you actually hit
-  function rockJag(wx){
-    const s = Math.sin(wx*0.15) * 43758.5453;
-    return s - Math.floor(s);
-  }
-  function drawRocks(){
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    ctx.fillStyle = '#1c130a';
-    ctx.strokeStyle = 'rgba(255,120,60,0.25)';
-    ctx.lineWidth = 1;
-    let path = false;
-    for(let sx = 0; sx <= W; sx += 5){
-      const wx = sx + camOffset;
-      if(isGap(wx)){
-        const jag = rockJag(wx);
-        const spikeH = 34 + jag*55;
-        const y = H - spikeH;
-        if(!path){ ctx.beginPath(); ctx.moveTo(sx, H); path = true; }
-        ctx.lineTo(sx, y);
-      } else if(path){
-        ctx.lineTo(sx, H);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        path = false;
-      }
-    }
-    if(path){
-      ctx.lineTo(W, H);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  function drawSawShape(sx, sy, radius, spin){
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(spin);
-
+  function drawWatcherPresence(){
+    const t = watcherMeter/100;
+    const h = H*0.12 + H*0.5*t*t;
+    const grad = ctx.createLinearGradient(0,0,0,h);
+    grad.addColorStop(0, 'rgba(122,15,15,0.9)');
+    grad.addColorStop(1, 'rgba(122,15,15,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,h);
     ctx.fillStyle = '#ff3b3b';
     ctx.beginPath();
-    const teeth = 12;
-    for(let i = 0; i <= teeth; i++){
-      const a = (i/teeth) * Math.PI*2;
-      const r = (i % 2 === 0) ? radius : radius*0.72;
-      const px = Math.cos(a)*r, py = Math.sin(a)*r;
-      if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#3a0a0a';
-    ctx.beginPath();
-    ctx.arc(0, 0, radius*0.35, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.restore();
-
-    ctx.strokeStyle = 'rgba(255,59,59,0.3)';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(sx, sy, radius+8, 0, Math.PI*2);
-    ctx.stroke();
-  }
-
-  function drawSaw(){
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    const sawWx = nearestWorldX(car.worldX, SAW_LOCAL_X);
-    const sx = sawWx - camOffset;
-    if(sx < -60 || sx > W+60) return;
-    const sy = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
-    drawSawShape(sx, sy, SAW_RADIUS, sawSpin);
-  }
-
-  function drawSaw2(){
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    const sawWx = nearestWorldX(car.worldX, SAW2_LOCAL_X);
-    const sx = sawWx - camOffset;
-    if(sx < -60 || sx > W+60) return;
-    const sy = (H*0.6) - saw2HeightAt(gameTime);
-    drawSawShape(sx, sy, SAW2_RADIUS, -sawSpin*1.3);
-  }
-
-  function drawWatcher(){
-    const carScreenX = W * CAR_SCREEN_X_RATIO;
-    const wx = carScreenX - watcherOffset;
-    if(wx < -40) return;
-    const wy = groundHeight(car.worldX - watcherOffset) - 20;
-    ctx.fillStyle = 'rgba(10,5,5,0.9)';
-    ctx.beginPath();
-    ctx.ellipse(wx, wy, 15, 24, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#ff3b3b';
-    ctx.beginPath();
-    ctx.arc(wx + 4, wy - 6, 3, 0, Math.PI*2);
+    ctx.arc(W/2, h*0.5, 5+t*4, 0, Math.PI*2);
     ctx.fill();
   }
 
-  function drawVehicleAt(x, y, rotation, alpha){
+  function drawPlayer(px, py, shakeX){
     ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(x, y);
-    ctx.rotate(rotation * Math.PI/180);
-
-    const wx1 = -CAR_W*0.4, wx2 = CAR_W*0.4, wy = CAR_H*0.55;
-
-    // wheels — dark tire, amber rim
-    [wx1, wx2].forEach(wxp=>{
-      ctx.fillStyle = '#0d0906';
-      ctx.beginPath(); ctx.arc(wxp, wy, WHEEL_R, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#ffd97a';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(wxp, wy, WHEEL_R*0.55, 0, Math.PI*2); ctx.stroke();
-    });
-
-    // spokes rotating with wheelSpin so the wheels visibly turn
-    ctx.strokeStyle = 'rgba(255,217,122,0.8)';
-    ctx.lineWidth = 1.3;
-    [wx1, wx2].forEach(wxp=>{
-      for(let s = 0; s < 4; s++){
-        const a = wheelSpin + s*(Math.PI/2);
-        ctx.beginPath();
-        ctx.moveTo(wxp, wy);
-        ctx.lineTo(wxp + Math.cos(a)*WHEEL_R*0.5, wy + Math.sin(a)*WHEEL_R*0.5);
-        ctx.stroke();
-      }
-    });
-
-    // solid tapered body — a real fuselage shape instead of a thin
-    // frame line, curving up to a seat hump then down to the front
+    ctx.translate(px+shakeX, py);
     ctx.fillStyle = '#ffd97a';
     ctx.beginPath();
-    ctx.moveTo(wx1+4, wy-2);
-    ctx.quadraticCurveTo(-CAR_W*0.1, -CAR_H*0.5, CAR_W*0.1, -CAR_H*0.75);
-    ctx.quadraticCurveTo(CAR_W*0.32, -CAR_H*0.55, wx2-2, wy-4);
-    ctx.quadraticCurveTo(CAR_W*0.15, wy+2, -CAR_W*0.05, wy-4);
-    ctx.closePath();
+    ctx.ellipse(0, 0, 13, 16, 0, 0, Math.PI*2);
     ctx.fill();
-
-    // dark accent stripe along the body
-    ctx.strokeStyle = '#8a5a10';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(wx1+8, wy-6);
-    ctx.quadraticCurveTo(0, -CAR_H*0.35, wx2-8, wy-8);
-    ctx.stroke();
-
-    // small windscreen up front
-    ctx.fillStyle = 'rgba(180,220,255,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(CAR_W*0.28, -CAR_H*0.6);
-    ctx.lineTo(CAR_W*0.42, -CAR_H*0.35);
-    ctx.lineTo(CAR_W*0.30, -CAR_H*0.4);
-    ctx.closePath();
-    ctx.fill();
-
-    // exhaust out back
-    ctx.fillStyle = '#5a5348';
-    ctx.beginPath();
-    ctx.ellipse(wx1-2, wy+2, 5, 2.5, 0.3, 0, Math.PI*2);
-    ctx.fill();
-
-    // rider — torso, helmet with a visor, arm reaching to the bars
     ctx.fillStyle = '#14100a';
     ctx.beginPath();
-    ctx.ellipse(CAR_W*0.02, -CAR_H*0.95, CAR_W*0.14, CAR_H*0.4, -0.5, 0, Math.PI*2);
+    ctx.arc(0, -16, 9, 0, Math.PI*2);
     ctx.fill();
-
-    ctx.fillStyle = '#ffd97a';
-    ctx.beginPath();
-    ctx.arc(CAR_W*0.18, -CAR_H*1.3, CAR_H*0.24, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(100,180,255,0.6)';
-    ctx.beginPath();
-    ctx.arc(CAR_W*0.22, -CAR_H*1.28, CAR_H*0.12, -0.5, 1.2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#14100a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(CAR_W*0.05, -CAR_H*0.85);
-    ctx.lineTo(CAR_W*0.35, -CAR_H*0.5);
-    ctx.stroke();
-
     ctx.restore();
-    ctx.globalAlpha = 1;
   }
 
-  function drawCar(){
-    const carScreenX = W * CAR_SCREEN_X_RATIO;
-
-    // ghost trail while airborne — the signature "you can see the flip
-    // happening" look, a few faded copies of the bike at recent angles
-    if(!car.grounded && rotationTrail.length > 1){
-      rotationTrail.forEach((r, i)=>{
-        const alpha = (i / rotationTrail.length) * 0.22;
-        drawVehicleAt(carScreenX, car.y, r, alpha);
-      });
-    }
-
-    drawVehicleAt(carScreenX, car.y, car.rotation, 1);
+  function drawObstacle(o){
+    ctx.fillStyle = '#5c4e1a';
+    ctx.fillRect(o.x-16, o.y-14, 32, 28);
+    ctx.strokeStyle = 'rgba(255,184,77,0.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(o.x-16, o.y-14, 32, 28);
   }
 
   function updateEffects(dt){
-    for(let i = particles.length-1; i>=0; i--){
+    for(let i=particles.length-1;i>=0;i--){
       const p = particles[i];
       p.life -= dt;
-      if(p.life <= 0){ particles.splice(i,1); continue; }
-      p.x += p.vx*dt; p.y += p.vy*dt; p.vy += GRAVITY*0.5*dt;
+      if(p.life<=0){ particles.splice(i,1); continue; }
+      p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 0.0006*dt;
     }
-    for(let i = popups.length-1; i>=0; i--){
+    for(let i=popups.length-1;i>=0;i--){
       const p = popups[i];
       p.life -= dt;
-      if(p.life <= 0){ popups.splice(i,1); continue; }
+      if(p.life<=0){ popups.splice(i,1); continue; }
       p.y -= dt*0.03;
     }
   }
-
   function drawParticles(){
     particles.forEach(p=>{
-      const a = Math.max(0, p.life/p.maxLife);
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
       ctx.fillStyle = p.color;
-      ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+      ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
     });
     ctx.globalAlpha = 1;
   }
-
   function drawPopups(){
     ctx.textAlign = 'center';
-    ctx.font = 'bold 14px "JetBrains Mono", monospace';
+    ctx.font = 'bold 13px "JetBrains Mono", monospace';
     popups.forEach(p=>{
-      const a = Math.max(0, p.life/p.maxLife);
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
       ctx.fillStyle = p.color;
       ctx.fillText(p.text, p.x, p.y);
     });
     ctx.globalAlpha = 1;
   }
 
-  function drawSpeedLines(){
-    if(!car.grounded || car.speed < MAX_SPEED*0.7) return;
-    const carScreenX = W * CAR_SCREEN_X_RATIO;
-    ctx.strokeStyle = 'rgba(255,217,122,0.25)';
-    ctx.lineWidth = 2;
-    for(let i = 0; i < 3; i++){
-      const lx = carScreenX - 30 - i*14 - Math.random()*10;
-      const ly = car.y - 4 + Math.random()*16;
-      ctx.beginPath();
-      ctx.moveTo(lx, ly);
-      ctx.lineTo(lx - 12, ly);
-      ctx.stroke();
-    }
-  }
-
   function loop(now){
-    if(state !== 'playing' && particles.length === 0 && popups.length === 0) return;
-    if(lastTime === null) lastTime = now;
-    const dt = Math.min(now - lastTime, 40);
+    if(state !== 'playing' && particles.length===0 && popups.length===0) return;
+    if(lastTime===null) lastTime = now;
+    const dt = Math.min(now-lastTime, 40);
     lastTime = now;
 
-    if(state === 'playing'){
-      // horizontal speed
-      if(car.grounded){
-        if(isBoost(car.worldX)){
-          car.speed = BOOST_SET_SPEED;
-        } else if(holding){
-          // only accelerate UP toward max — don't let this instantly
-          // cancel a boost that's currently above MAX_SPEED
-          if(car.speed < MAX_SPEED) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
-        } else {
-          car.speed = Math.max(0, car.speed - FRICTION*dt);
-        }
-      }
-      const prevWorldX = car.worldX;
-      car.worldX += car.speed * dt;
-      score += car.speed * dt * SCORE_RATE;
-
-      const nextGroundY = groundHeight(car.worldX);
-      const curInfo = getZoneInfo(car.worldX);
-
-      if(car.grounded){
-        const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
-        if(enteringGap){
-          car.grounded = false;
-          // the big jump uses a much higher boosted speed, so it needs
-          // its own gentler coefficient — the regular formula combined
-          // with that speed would send it flying off the top of the screen
-          car.vy = curInfo.z.big
-            ? -(0.20 + car.speed*1.0)
-            : -(0.20 + car.speed*2.1);
-          car.launchZone = curInfo.globalIdx;
-          car.launchedFromBig = curInfo.z.big;
-          flipAccum = 0;
-          rotationTrail.length = 0;
-        } else {
-          car.y = nextGroundY - WHEEL_BOTTOM_OFFSET;
-          car.vy = 0;
-          const targetAngle = slopeAngleAt(car.worldX);
-          car.rotation += (targetAngle - car.rotation) * Math.min(1, dt*0.02);
-        }
-      } else {
-        car.vy += GRAVITY*dt;
-        car.y += car.vy*dt;
-
-        rotationTrail.push(car.rotation);
-        if(rotationTrail.length > 6) rotationTrail.shift();
-
-        if(holding){
-          const delta = (car.launchedFromBig ? FLIP_RATE_BIG : FLIP_RATE) * dt;
-          car.rotation -= delta; // negative = backflip (front lifts first), not a front flip
-          flipAccum += delta;
-          if(Math.floor(flipAccum/360) > flipCount){
-            flipCount = Math.floor(flipAccum/360);
-            score += FLIP_BONUS;
-            spawnPopup('+' + FLIP_BONUS + ' FLIP!', W*CAR_SCREEN_X_RATIO, car.y - 30, '#ffd97a');
-          }
-        }
-
-        // fell past the bottom of the track without clearing the gap —
-        // a real fail state, not just a bad landing
-        const sawWx = nearestWorldX(car.worldX, SAW_LOCAL_X);
-        const sawScreenY = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
-        const sawDist = Math.hypot(car.worldX - sawWx, car.y - sawScreenY);
-        const saw2Wx = nearestWorldX(car.worldX, SAW2_LOCAL_X);
-        const saw2ScreenY = (H*0.6) - saw2HeightAt(gameTime);
-        const saw2Dist = Math.hypot(car.worldX - saw2Wx, car.y - saw2ScreenY);
-        if(sawDist < SAW_RADIUS + 14){
-          explode();
-        } else if(saw2Dist < SAW2_RADIUS + 14){
-          explode();
-        } else if(car.y > H + 60){
-          explode();
-        } else if(curInfo.globalIdx > car.launchZone){
-          // still airborne but already flown past the zone this jump
-          // launched from — held too long, went too far, overshot
-          // the landing you were meant to hit
-          explode();
-        } else if(car.y >= nextGroundY - WHEEL_BOTTOM_OFFSET && nextGroundY < H + 500){
-          const norm = ((car.rotation % 360) + 360) % 360;
-          const distFromUpright = Math.min(norm, 360-norm);
-          car.y = nextGroundY - WHEEL_BOTTOM_OFFSET;
-          if(distFromUpright > SAFE_LANDING_ANGLE){
-            explode();
-          } else {
-            car.vy = 0;
-            car.grounded = true;
-            car.rotation = slopeAngleAt(car.worldX);
-            rotationTrail.length = 0;
-          }
-        }
-      }
-
-      watcherOffset = Math.max(140, 240 - score*0.01);
+    if(state==='playing'){
+      score += dt*SCORE_RATE;
       scoreEl.textContent = Math.floor(score);
 
-      // wheel spin rate tied to actual distance covered, so it always
-      // matches how fast the bike is really moving
-      wheelSpin += (car.speed * dt) / WHEEL_R;
-      sawSpin += dt * 0.003;
-      gameTime += dt;
+      const spawnInterval = Math.max(MIN_SPAWN_MS, BASE_SPAWN_MS - score*SPAWN_RAMP);
+      if(now >= nextSpawnAt){
+        nextSpawnAt = now + spawnInterval;
+        obstacles.push({ lane: Math.floor(Math.random()*LANE_COUNT), y: -30, passed:false });
+      }
 
-      const speedRatio = car.speed / MAX_SPEED;
-      updateEngineSound(Math.max(0, Math.min(1, speedRatio)), car.grounded);
+      const playerY = H*0.8;
+      const obstacleSpeed = 0.10 + Math.min(score,300)*0.0006;
+      for(let i=obstacles.length-1;i>=0;i--){
+        const o = obstacles[i];
+        o.y += obstacleSpeed*dt;
+        o.x = laneX(o.lane);
+        if(!o.passed && o.y > playerY+20){
+          o.passed = true;
+          if(o.lane === player.lane && now > invulnUntil){
+            invulnUntil = now + INVULN_MS;
+            watcherMeter = Math.min(100, watcherMeter + HIT_METER_GAIN);
+            playHitSound();
+            shakeTime = 220;
+            spawnPopup('HIT', laneX(player.lane), playerY-30, '#ff3b3b');
+            spawnBurst(laneX(player.lane), playerY, '#ff8a3d', 10);
+          } else {
+            watcherMeter = Math.max(0, watcherMeter - DODGE_METER_LOSS);
+          }
+        }
+        if(o.y > H+40) obstacles.splice(i,1);
+      }
+
+      watcherMeter += dt*METER_CREEP_PER_MS;
+      maybePulseHeartbeat(now, watcherMeter);
+      if(watcherMeter >= 100){ caught(); }
     }
 
     updateEffects(dt);
 
+    const shakeX = shakeTime>0 ? (Math.random()-0.5)*6 : 0;
+    if(shakeTime>0) shakeTime -= dt;
+
     drawBackground();
-    drawTerrain();
-    drawBoostPad();
-    drawRocks();
-    drawSaw();
-    drawSaw2();
-    drawWatcher();
-    drawSpeedLines();
-    drawCar();
+    drawWatcherPresence();
+    obstacles.forEach(drawObstacle);
+    drawPlayer(laneX(player.lane), H*0.8, shakeX);
     drawParticles();
     drawPopups();
 
-    requestAnimationFrame(loop);
+    if(state==='playing' || particles.length || popups.length) requestAnimationFrame(loop);
   }
 
   function drawIdle(){
     drawBackground();
-    drawTerrain();
-    drawBoostPad();
-    drawRocks();
-    drawSaw();
-    drawSaw2();
-    drawWatcher();
-    drawCar();
+    drawWatcherPresence();
+    drawPlayer(laneX(player.lane), H*0.8, 0);
   }
   drawIdle();
 } catch(err) {
