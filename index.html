@@ -273,6 +273,12 @@
     font-family: var(--display); font-size: clamp(28px, 7vw, 48px); font-weight: 700;
     color: var(--amber); letter-spacing: 2px; text-shadow: 0 0 20px rgba(255,184,77,0.4);
   }
+  .team-access-link {
+    position: relative; z-index: 1; margin-top: 18px; background: none; border: none;
+    color: var(--amber-faint); font-family: var(--body); font-size: 10px;
+    letter-spacing: 1px; cursor: pointer; text-decoration: underline; opacity: 0.5;
+  }
+  .team-access-link:hover { opacity: 0.9; }
   #gameCanvas { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
   .game-hud {
     position: absolute; top: 10px; left: 12px; right: 12px; height: 34px; z-index: 3;
@@ -571,6 +577,7 @@
       <div class="countdown-block" id="teaserOverlay">
         <div class="countdown-label">REVEALS IN</div>
         <div class="countdown-timer" id="countdownTimer">--:--:--:--</div>
+        <button class="team-access-link" id="teamAccessBtn">team access</button>
       </div>
     </div>
   </div>
@@ -1129,9 +1136,52 @@ setupExpandableList('#faqList');
     document.getElementById('menuCountdownTimer')
   ].filter(Boolean);
   const progressEl = document.getElementById('countdownProgress');
-  if(!timerEls.length && !progressEl) return;
+  const teaserOverlay = document.getElementById('teaserOverlay');
+  const teamAccessBtn = document.getElementById('teamAccessBtn');
   const target = new Date('2026-07-28T18:00:00Z').getTime();
-  const start = target - 4*24*60*60*1000; // countdown window started 4 days before target
+  const start = target - 4*24*60*60*1000;
+  const teamWindowStart = target - 2*24*60*60*1000; // developers/marketing can unlock from here on
+
+  // NOTE: these are a practical gate for trusted team use, not real
+  // security — this is a plain static website with no server or login
+  // system, so anyone who reads the page's code could find these.
+  // Change them to your own private codes if you want.
+  const OWNER_CODE = 'VIPEROWNER';
+  const TEAM_CODE = 'VIPERTEAM';
+
+  function unlockGame(){
+    if(teaserOverlay) teaserOverlay.style.display = 'none';
+  }
+
+  if(teamAccessBtn){
+    teamAccessBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const stored = localStorage.getItem('theunseen_access');
+      if(stored === 'owner'){ unlockGame(); return; }
+      if(stored === 'team' && Date.now() >= teamWindowStart){ unlockGame(); return; }
+
+      const code = prompt('Team access code:');
+      if(code === OWNER_CODE){
+        localStorage.setItem('theunseen_access', 'owner');
+        unlockGame();
+      } else if(code === TEAM_CODE){
+        if(Date.now() >= teamWindowStart){
+          localStorage.setItem('theunseen_access', 'team');
+          unlockGame();
+        } else {
+          alert('This unlocks 2 days before release.');
+        }
+      } else if(code !== null){
+        alert('Incorrect code.');
+      }
+    });
+  }
+
+  // auto-unlock on return visits if already verified
+  const stored = localStorage.getItem('theunseen_access');
+  if(stored === 'owner' || (stored === 'team' && Date.now() >= teamWindowStart)){
+    unlockGame();
+  }
 
   function tick(){
     const now = Date.now();
@@ -1139,6 +1189,7 @@ setupExpandableList('#faqList');
     let text;
     if(diff <= 0){
       text = "IT'S HERE";
+      unlockGame();
     } else {
       const days = Math.floor(diff / 86400000);
       const hours = Math.floor((diff % 86400000) / 3600000);
