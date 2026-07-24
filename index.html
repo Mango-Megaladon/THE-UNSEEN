@@ -1043,6 +1043,7 @@ setupExpandableList('#faqList');
 
 // ---------- mini-game: hill-racer with flips, styled to match the real game ----------
 (function(){
+try {
   const canvas = document.getElementById('gameCanvas');
   if(!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -1238,11 +1239,11 @@ setupExpandableList('#faqList');
     // body
     ctx.fillStyle = '#ffd97a';
     ctx.beginPath();
-    ctx.roundRect(-CAR_W/2, -CAR_H/2, CAR_W, CAR_H, 5);
+    ctx.rect(-CAR_W/2, -CAR_H/2, CAR_W, CAR_H);
     ctx.fill();
     ctx.fillStyle = '#0d0a04';
     ctx.beginPath();
-    ctx.roundRect(-CAR_W*0.12, -CAR_H*0.9, CAR_W*0.42, CAR_H*0.6, 3);
+    ctx.rect(-CAR_W*0.12, -CAR_H*0.9, CAR_W*0.42, CAR_H*0.6);
     ctx.fill();
 
     ctx.restore();
@@ -1331,6 +1332,9 @@ setupExpandableList('#faqList');
     drawCar();
   }
   drawIdle();
+} catch(err) {
+  console.error('mini-game failed to start:', err);
+}
 })();
 
 // ---------- monster eye tracks your cursor / touch ----------
