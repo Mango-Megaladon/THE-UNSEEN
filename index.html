@@ -1198,32 +1198,62 @@ try {
   const CAR_SCREEN_X_RATIO = 0.28;
   const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
 
-  // real gap-jumps: a launch ramp, a genuine void with no ground, then a
-  // landing ramp — matching the floating-segment look, rather than the
-  // continuous rolling bumps from before. Going too slow means falling
-  // into the gap; enough speed clears it.
-  const SEGMENT = 900, RAMP_START = 550, RAMP_LEN = 150, GAP_LEN = 220, LAND_LEN = 150;
+  // real gap-jumps with genuine variety — different gap widths and
+  // different recovery-zone lengths so it's not the same jump on repeat.
+  // tested via simulation before tuning: always holding eventually
+  // overshoots a landing zone and crashes, never holding just stalls,
+  // and managing speed sensibly is what actually gets you through
+  const RAMP_LEN = 140, LAND_LEN = 120;
+  const JUMP_VARIANTS = [
+    { gap: 160, recovery: 200 },
+    { gap: 230, recovery: 160 },
+    { gap: 130, recovery: 240 },
+    { gap: 260, recovery: 180 },
+    { gap: 180, recovery: 150 },
+    { gap: 200, recovery: 220 },
+  ];
+  const zones = (function(){
+    const list = [];
+    let cursor = 280;
+    JUMP_VARIANTS.forEach((v, i) => {
+      const rampStart = cursor;
+      const gapStart = rampStart + RAMP_LEN;
+      const landStart = gapStart + v.gap;
+      const recoveryStart = landStart + LAND_LEN;
+      const zoneEnd = recoveryStart + v.recovery;
+      list.push({ idx: i, rampStart, gapStart, landStart, zoneEnd });
+      cursor = zoneEnd;
+    });
+    return list;
+  })();
+  const CYCLE_LEN = zones[zones.length-1].zoneEnd;
+
+  function getZoneInfo(wx){
+    const local = ((wx % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
+    const cycleNum = Math.floor((wx - local) / CYCLE_LEN + 0.5);
+    for(const z of zones){
+      if(local < z.zoneEnd) return { z, local, globalIdx: cycleNum*zones.length + z.idx };
+    }
+    const last = zones[zones.length-1];
+    return { z: last, local, globalIdx: cycleNum*zones.length + last.idx };
+  }
   function isGap(wx){
-    const local = ((wx % SEGMENT) + SEGMENT) % SEGMENT;
-    const rampLocal = local - RAMP_START;
-    if(rampLocal < 0) return false;
-    const gapLocal = rampLocal - RAMP_LEN;
-    return gapLocal >= 0 && gapLocal < GAP_LEN;
+    const { z, local } = getZoneInfo(wx);
+    return local >= z.gapStart && local < z.landStart;
   }
   function groundHeight(wx){
     const baseline = H * 0.6;
-    const local = ((wx % SEGMENT) + SEGMENT) % SEGMENT;
+    const { z, local } = getZoneInfo(wx);
     const rolling = Math.sin(wx*0.006)*14 + Math.sin(wx*0.014+1.3)*8;
 
-    if(local < RAMP_START) return baseline + rolling;
-    const rampLocal = local - RAMP_START;
+    if(local < z.rampStart) return baseline + rolling;
+    const rampLocal = local - z.rampStart;
     if(rampLocal < RAMP_LEN){
       const t = rampLocal/RAMP_LEN;
       return baseline + rolling - Math.pow(t,1.6)*90;
     }
-    const gapLocal = rampLocal - RAMP_LEN;
-    if(gapLocal < GAP_LEN) return H + 999; // the void — no ground here
-    const landLocal = gapLocal - GAP_LEN;
+    if(local < z.landStart) return H + 999; // the void — no ground here
+    const landLocal = local - z.landStart;
     if(landLocal < LAND_LEN){
       const t = landLocal/LAND_LEN;
       return baseline + rolling - (1-t)*70;
@@ -1277,7 +1307,7 @@ try {
   function resetGame(){
     car = {
       worldX: 0, y: groundHeight(0), vy: 0,
-      rotation: 0, speed: MIN_SPEED, grounded: true
+      rotation: 0, speed: MIN_SPEED, grounded: true, launchZone: null
     };
     watcherOffset = 240;
     score = 0;
@@ -1567,12 +1597,14 @@ try {
       score += car.speed * dt * SCORE_RATE;
 
       const nextGroundY = groundHeight(car.worldX);
+      const curInfo = getZoneInfo(car.worldX);
 
       if(car.grounded){
         const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
         if(enteringGap){
           car.grounded = false;
-          car.vy = -(0.34 + car.speed*0.34);
+          car.vy = -(0.28 + car.speed); // tuned so holding flat-out eventually overshoots
+          car.launchZone = curInfo.globalIdx;
           flipAccum = 0;
           rotationTrail.length = 0;
         } else {
@@ -1602,6 +1634,11 @@ try {
         // fell past the bottom of the track without clearing the gap —
         // a real fail state, not just a bad landing
         if(car.y > H + 60){
+          explode();
+        } else if(curInfo.globalIdx > car.launchZone){
+          // still airborne but already flown past the zone this jump
+          // launched from — held too long, went too far, overshot
+          // the landing you were meant to hit
           explode();
         } else if(car.y >= nextGroundY && nextGroundY < H + 500){
           const norm = ((car.rotation % 360) + 360) % 360;
