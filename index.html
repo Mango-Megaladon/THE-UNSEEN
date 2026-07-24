@@ -1192,9 +1192,9 @@ try {
   const FRICTION = 0.00030;
   const MAX_SPEED = 0.32;
   const MIN_SPEED = 0.15;
-  const FLIP_RATE = 0.38;          // degrees per ms while holding + airborne — regular jumps
+  const FLIP_RATE = 0.42;          // degrees per ms while holding + airborne — regular jumps, nudged up to make a full spin more achievable
   const FLIP_RATE_BIG = 0.55;      // the big jump's arc is deliberately shorter to stay on-screen, so it spins a bit faster to still land a full flip
-  const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
+  const SAFE_LANDING_ANGLE = 120;  // now only a genuinely upside-down-ish landing is fatal — the old 55deg left almost no margin since the ramps themselves launch you at ~45deg
   const SCORE_RATE = 0.03;         // score per world-unit of progress
   const FLIP_BONUS = 150;
   const CAR_SCREEN_X_RATIO = 0.28;
