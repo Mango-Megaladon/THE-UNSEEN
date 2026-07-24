@@ -240,6 +240,7 @@
     position: relative; margin-top: 24px; border: 2px solid rgba(255,184,77,0.35);
     border-radius: 4px; overflow: hidden; background: #0d0a04;
     aspect-ratio: 16/8; max-width: 100%;
+    user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
   }
   #gameCanvas { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
   .game-hud {
@@ -1197,6 +1198,7 @@ try {
   const FLIP_BONUS = 150;
   const CAR_SCREEN_X_RATIO = 0.28;
   const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
+  const WHEEL_BOTTOM_OFFSET = CAR_H*0.55 + WHEEL_R; // how far below car.y the wheel-bottoms actually sit
 
   // real gap-jumps with genuine variety — different gap widths and
   // different recovery-zone lengths so it's not the same jump on repeat.
@@ -1269,7 +1271,7 @@ try {
 
   let state = 'ready'; // ready | playing | gameover
   let holding = false;
-  let car, watcherOffset, score, best, lastTime, flipAccum, flipCount;
+  let car, watcherOffset, score, best, lastTime, flipAccum, flipCount, wheelSpin;
   let rotationTrail, particles, popups;
 
   function loadBest(){
@@ -1306,7 +1308,7 @@ try {
 
   function resetGame(){
     car = {
-      worldX: 0, y: groundHeight(0), vy: 0,
+      worldX: 0, y: groundHeight(0) - WHEEL_BOTTOM_OFFSET, vy: 0,
       rotation: 0, speed: MIN_SPEED, grounded: true, launchZone: null
     };
     watcherOffset = 240;
@@ -1315,6 +1317,7 @@ try {
     flipCount = 0;
     lastTime = null;
     rotationTrail = [];
+    wheelSpin = 0;
     particles = [];
     popups = [];
   }
@@ -1352,9 +1355,9 @@ try {
     holding = v;
   }
 
-  canvas.addEventListener('pointerdown', (e)=>{ startOrRestart(); setHolding(true); });
+  canvas.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startOrRestart(); setHolding(true); });
   window.addEventListener('pointerup', ()=> setHolding(false));
-  overlay.addEventListener('pointerdown', (e)=>{ startOrRestart(); setHolding(true); });
+  overlay.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startOrRestart(); setHolding(true); });
   window.addEventListener('keydown', (e)=>{
     if(e.code !== 'Space') return;
     e.preventDefault();
@@ -1491,6 +1494,19 @@ try {
     ctx.beginPath(); ctx.arc(-CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
     ctx.beginPath(); ctx.arc(CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
 
+    // spokes rotating with wheelSpin so the wheels visibly turn while driving
+    ctx.strokeStyle = 'rgba(255,217,122,0.7)';
+    ctx.lineWidth = 1.2;
+    [-CAR_W*0.4, CAR_W*0.4].forEach(wx=>{
+      for(let s = 0; s < 3; s++){
+        const a = wheelSpin + s * (Math.PI*2/3);
+        ctx.beginPath();
+        ctx.moveTo(wx, CAR_H*0.55);
+        ctx.lineTo(wx + Math.cos(a)*WHEEL_R*0.85, CAR_H*0.55 + Math.sin(a)*WHEEL_R*0.85);
+        ctx.stroke();
+      }
+    });
+
     // thin frame connecting the wheels
     ctx.strokeStyle = '#ffd97a';
     ctx.lineWidth = 4;
@@ -1608,7 +1624,7 @@ try {
           flipAccum = 0;
           rotationTrail.length = 0;
         } else {
-          car.y = nextGroundY;
+          car.y = nextGroundY - WHEEL_BOTTOM_OFFSET;
           car.vy = 0;
           const targetAngle = slopeAngleAt(car.worldX);
           car.rotation += (targetAngle - car.rotation) * Math.min(1, dt*0.02);
@@ -1640,10 +1656,10 @@ try {
           // launched from — held too long, went too far, overshot
           // the landing you were meant to hit
           explode();
-        } else if(car.y >= nextGroundY && nextGroundY < H + 500){
+        } else if(car.y >= nextGroundY - WHEEL_BOTTOM_OFFSET && nextGroundY < H + 500){
           const norm = ((car.rotation % 360) + 360) % 360;
           const distFromUpright = Math.min(norm, 360-norm);
-          car.y = nextGroundY;
+          car.y = nextGroundY - WHEEL_BOTTOM_OFFSET;
           if(distFromUpright > SAFE_LANDING_ANGLE){
             explode();
           } else {
@@ -1657,6 +1673,10 @@ try {
 
       watcherOffset = Math.max(140, 240 - score*0.01);
       scoreEl.textContent = Math.floor(score);
+
+      // wheel spin rate tied to actual distance covered, so it always
+      // matches how fast the bike is really moving
+      wheelSpin += (car.speed * dt) / WHEEL_R;
 
       const speedRatio = car.speed / MAX_SPEED;
       updateEngineSound(Math.max(0, Math.min(1, speedRatio)), car.grounded);
