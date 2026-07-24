@@ -243,10 +243,18 @@
   }
   #gameCanvas { width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
   .game-hud {
-    position: absolute; top: 10px; left: 12px; right: 12px; z-index: 3;
-    display: flex; justify-content: space-between;
-    font-size: 14px; font-weight: 700; letter-spacing: 1px; color: var(--amber);
-    text-shadow: 0 0 6px rgba(0,0,0,0.8); pointer-events: none;
+    position: absolute; top: 10px; left: 12px; right: 12px; height: 34px; z-index: 3;
+    pointer-events: none;
+  }
+  #gameScore {
+    position: absolute; left: 50%; top: 0; transform: translateX(-50%);
+    font-size: 26px; font-weight: 700; letter-spacing: 1px; color: var(--amber);
+    text-shadow: 0 0 8px rgba(0,0,0,0.9), 0 0 10px rgba(255,184,77,0.4);
+  }
+  #gameBest {
+    position: absolute; right: 0; top: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--ink-dim);
+    text-shadow: 0 0 6px rgba(0,0,0,0.8);
   }
   .game-overlay {
     position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column;
@@ -1118,6 +1126,46 @@ try {
     if(engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
   }
 
+  function playExplosionSound(){
+    if(!audioCtx) return;
+    try {
+      const t0 = audioCtx.currentTime;
+
+      // noise burst — the "crunch"
+      const bufferSize = Math.floor(audioCtx.sampleRate * 0.4);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0; i<bufferSize; i++){
+        data[i] = (Math.random()*2-1) * Math.pow(1 - i/bufferSize, 2);
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = audioCtx.createBiquadFilter();
+      noiseFilter.type = 'lowpass';
+      noiseFilter.frequency.value = 1400;
+      const noiseGain = audioCtx.createGain();
+      noiseGain.gain.setValueAtTime(0.55, t0);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, t0+0.4);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(audioCtx.destination);
+      noise.start(t0);
+
+      // low thump underneath — the "impact"
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(130, t0);
+      osc.frequency.exponentialRampToValueAtTime(35, t0+0.3);
+      const oscGain = audioCtx.createGain();
+      oscGain.gain.setValueAtTime(0.6, t0);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t0+0.35);
+      osc.connect(oscGain);
+      oscGain.connect(audioCtx.destination);
+      osc.start(t0);
+      osc.stop(t0+0.4);
+    } catch(e){ /* audio unavailable, game still works */ }
+  }
+
   function switchToDriveMusic(){
     if(menuMusic){
       menuMusic.volume = Math.max(0, menuMusic.volume - 0.25) || 0.08;
@@ -1150,32 +1198,40 @@ try {
   const CAR_SCREEN_X_RATIO = 0.28;
   const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
 
-  // gentle rolling hills everywhere, plus deliberate launch ramps at
-  // regular intervals — explicit ramps are far more reliable and fair
-  // than trying to detect launches from noisy continuous terrain
-  const RAMP_PERIOD = 700, RAMP_WIDTH = 130, RAMP_HEIGHT = 68;
-  function rampPhase(wx){
-    return ((wx % RAMP_PERIOD) + RAMP_PERIOD) % RAMP_PERIOD;
+  // real gap-jumps: a launch ramp, a genuine void with no ground, then a
+  // landing ramp — matching the floating-segment look, rather than the
+  // continuous rolling bumps from before. Going too slow means falling
+  // into the gap; enough speed clears it.
+  const SEGMENT = 900, RAMP_START = 550, RAMP_LEN = 150, GAP_LEN = 220, LAND_LEN = 150;
+  function isGap(wx){
+    const local = ((wx % SEGMENT) + SEGMENT) % SEGMENT;
+    const rampLocal = local - RAMP_START;
+    if(rampLocal < 0) return false;
+    const gapLocal = rampLocal - RAMP_LEN;
+    return gapLocal >= 0 && gapLocal < GAP_LEN;
   }
   function groundHeight(wx){
     const baseline = H * 0.6;
-    let y = baseline
-      + Math.sin(wx*0.006) * 20
-      + Math.sin(wx*0.014 + 1.3) * 11;
+    const local = ((wx % SEGMENT) + SEGMENT) % SEGMENT;
+    const rolling = Math.sin(wx*0.006)*14 + Math.sin(wx*0.014+1.3)*8;
 
-    const phase = rampPhase(wx);
-    if(phase < RAMP_WIDTH){
-      const t = phase / RAMP_WIDTH;
-      if(t < 0.5){
-        y -= Math.sin((t/0.5) * Math.PI/2) * RAMP_HEIGHT;
-      } else {
-        const t2 = (t-0.5)/0.5;
-        y -= (1 - t2*t2) * RAMP_HEIGHT;
-      }
+    if(local < RAMP_START) return baseline + rolling;
+    const rampLocal = local - RAMP_START;
+    if(rampLocal < RAMP_LEN){
+      const t = rampLocal/RAMP_LEN;
+      return baseline + rolling - Math.pow(t,1.6)*90;
     }
-    return y;
+    const gapLocal = rampLocal - RAMP_LEN;
+    if(gapLocal < GAP_LEN) return H + 999; // the void — no ground here
+    const landLocal = gapLocal - GAP_LEN;
+    if(landLocal < LAND_LEN){
+      const t = landLocal/LAND_LEN;
+      return baseline + rolling - (1-t)*70;
+    }
+    return baseline + rolling;
   }
   function slopeAngleAt(wx){
+    if(isGap(wx-5) || isGap(wx+5)) return 0;
     const d = 5;
     const y1 = groundHeight(wx-d), y2 = groundHeight(wx+d);
     return Math.atan2(y2-y1, 2*d) * 180/Math.PI;
@@ -1294,6 +1350,7 @@ try {
     spawnBurst(carScreenX, car.y, '#ffd97a', 10);
     switchToMenuMusic();
     stopEngineSound();
+    playExplosionSound();
     overlay.classList.add('crashed');
     setTimeout(()=> overlay.classList.remove('crashed'), 500);
     overlayTitle.textContent = 'DESTROYED';
@@ -1336,6 +1393,42 @@ try {
       if(sx === 0) ctx.moveTo(sx, gy); else ctx.lineTo(sx, gy);
     }
     ctx.stroke();
+  }
+
+  // jagged rocks filling the gap — falling in is fatal no matter which
+  // way up the bike is, this is just what you actually hit
+  function rockJag(wx){
+    const s = Math.sin(wx*0.15) * 43758.5453;
+    return s - Math.floor(s);
+  }
+  function drawRocks(){
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    ctx.fillStyle = '#1c130a';
+    ctx.strokeStyle = 'rgba(255,120,60,0.25)';
+    ctx.lineWidth = 1;
+    let path = false;
+    for(let sx = 0; sx <= W; sx += 5){
+      const wx = sx + camOffset;
+      if(isGap(wx)){
+        const jag = rockJag(wx);
+        const spikeH = 34 + jag*55;
+        const y = H - spikeH;
+        if(!path){ ctx.beginPath(); ctx.moveTo(sx, H); path = true; }
+        ctx.lineTo(sx, y);
+      } else if(path){
+        ctx.lineTo(sx, H);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        path = false;
+      }
+    }
+    if(path){
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 
   function drawWatcher(){
@@ -1476,12 +1569,10 @@ try {
       const nextGroundY = groundHeight(car.worldX);
 
       if(car.grounded){
-        const prevPhase = rampPhase(prevWorldX);
-        const currPhase = rampPhase(car.worldX);
-        const crossedPeak = prevPhase < RAMP_WIDTH*0.5 && currPhase >= RAMP_WIDTH*0.5 && currPhase < RAMP_WIDTH;
-        if(crossedPeak){
+        const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
+        if(enteringGap){
           car.grounded = false;
-          car.vy = -(0.30 + car.speed*0.32);
+          car.vy = -(0.34 + car.speed*0.34);
           flipAccum = 0;
           rotationTrail.length = 0;
         } else {
@@ -1499,7 +1590,7 @@ try {
 
         if(holding){
           const delta = FLIP_RATE*dt;
-          car.rotation += delta;
+          car.rotation -= delta; // negative = backflip (front lifts first), not a front flip
           flipAccum += delta;
           if(Math.floor(flipAccum/360) > flipCount){
             flipCount = Math.floor(flipAccum/360);
@@ -1508,7 +1599,11 @@ try {
           }
         }
 
-        if(car.y >= nextGroundY){
+        // fell past the bottom of the track without clearing the gap —
+        // a real fail state, not just a bad landing
+        if(car.y > H + 60){
+          explode();
+        } else if(car.y >= nextGroundY && nextGroundY < H + 500){
           const norm = ((car.rotation % 360) + 360) % 360;
           const distFromUpright = Math.min(norm, 360-norm);
           car.y = nextGroundY;
@@ -1534,6 +1629,7 @@ try {
 
     drawBackground();
     drawTerrain();
+    drawRocks();
     drawWatcher();
     drawSpeedLines();
     drawCar();
@@ -1546,6 +1642,7 @@ try {
   function drawIdle(){
     drawBackground();
     drawTerrain();
+    drawRocks();
     drawWatcher();
     drawCar();
   }
