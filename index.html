@@ -1192,7 +1192,7 @@ try {
   const FRICTION = 0.00030;
   const MAX_SPEED = 0.32;
   const MIN_SPEED = 0.15;
-  const FLIP_RATE = 0.35;          // degrees per ms while holding + airborne — slower, more controlled
+  const FLIP_RATE = 0.38;          // degrees per ms while holding + airborne — tuned so the big jump comfortably allows a full flip
   const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
   const SCORE_RATE = 0.03;         // score per world-unit of progress
   const FLIP_BONUS = 150;
@@ -1201,19 +1201,19 @@ try {
   const WHEEL_BOTTOM_OFFSET = CAR_H*0.55 + WHEEL_R; // how far below car.y the wheel-bottoms actually sit
 
   // real gap-jumps with genuine variety, plus one big jump with a boost
-  // pad right before it — tested via simulation: the boost gives enough
-  // speed and hangtime (1300+ms) to comfortably land a full flip even
-  // at the slower spin rate, without needing to cut it dangerously close
+  // pad right before it. Jump heights were cut way down from an earlier
+  // version that was launching cars off the top of the screen — gaps
+  // were shrunk to match so they're still fair at the lower arc height
   const RAMP_LEN = 140, LAND_LEN = 120;
-  const BOOST_LEN = 60, BOOST_SET_SPEED = 0.55;
+  const BOOST_LEN = 60, BOOST_SET_SPEED = 0.62;
   const JUMP_VARIANTS = [
-    { gap: 160, recovery: 200 },
-    { gap: 230, recovery: 160 },
-    { gap: 130, recovery: 240 },
-    { gap: 260, recovery: 180 },
-    { gap: 180, recovery: 150 },
-    { gap: 200, recovery: 220 },
-    { gap: 380, recovery: 260, big: true }, // the big jump
+    { gap: 110, recovery: 200 },
+    { gap: 150, recovery: 160 },
+    { gap: 90, recovery: 240 },
+    { gap: 170, recovery: 180 },
+    { gap: 120, recovery: 150 },
+    { gap: 135, recovery: 220 },
+    { gap: 240, recovery: 260, big: true }, // the big jump
   ];
   const zones = (function(){
     const list = [];
@@ -1233,14 +1233,27 @@ try {
   })();
   const CYCLE_LEN = zones[zones.length-1].zoneEnd;
 
-  // spinning saw hazard — moved onto the very first jump so it's
-  // guaranteed to be seen instead of sitting on a later jump players
-  // might not reach
-  const SAW_ZONE_IDX = 0;
+  // spinning saw hazard — bigger now, so it needed a wider gap (zone 3)
+  // to actually be clearable, and a much lower height to match the
+  // reduced jump arcs
+  const SAW_ZONE_IDX = 3;
   const SAW_LOCAL_X = (zones[SAW_ZONE_IDX].gapStart + zones[SAW_ZONE_IDX].landStart) / 2;
-  const SAW_HEIGHT_ABOVE_BASE = 100; // tested: clears with margin above ~0.24 speed, only very slow runs get caught
-  const SAW_RADIUS = 22;
+  const SAW_HEIGHT_ABOVE_BASE = 40;
+  const SAW_RADIUS = 32;
   let sawSpin = 0;
+
+  // second hazard — a saw that moves up and down over time (not fixed
+  // like the first one). Positioned on zone 5's gap. If it's in its
+  // "high" position and you're still high in your jump when you reach
+  // it, you hit it — you need to already be descending by then.
+  const SAW2_ZONE_IDX = 5;
+  const SAW2_LOCAL_X = (zones[SAW2_ZONE_IDX].gapStart + zones[SAW2_ZONE_IDX].landStart) / 2;
+  const SAW2_RADIUS = 26;
+  let gameTime = 0;
+  function saw2HeightAt(t){
+    // oscillates between ~25 and ~150 above baseline, roughly a 2.6s cycle
+    return 87 + Math.sin(t * 0.0024) * 63;
+  }
 
   function getZoneInfo(wx){
     const local = ((wx % CYCLE_LEN) + CYCLE_LEN) % CYCLE_LEN;
@@ -1287,9 +1300,9 @@ try {
 
   // the saw repeats once per cycle — find the copy of it nearest to
   // wherever the car currently is
-  function nearestSawWorldX(carWorldX){
-    const cycleNum = Math.round((carWorldX - SAW_LOCAL_X) / CYCLE_LEN);
-    return cycleNum*CYCLE_LEN + SAW_LOCAL_X;
+  function nearestWorldX(carWorldX, localX){
+    const cycleNum = Math.round((carWorldX - localX) / CYCLE_LEN);
+    return cycleNum*CYCLE_LEN + localX;
   }
 
   let state = 'ready'; // ready | playing | gameover
@@ -1516,44 +1529,53 @@ try {
     }
   }
 
-  function drawSaw(){
-    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
-    const sawWx = nearestSawWorldX(car.worldX);
-    const sx = sawWx - camOffset;
-    if(sx < -60 || sx > W+60) return; // off-screen, skip
-    const sy = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
-
+  function drawSawShape(sx, sy, radius, spin){
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.rotate(sawSpin);
+    ctx.rotate(spin);
 
-    // jagged spiky circle — the "teeth"
     ctx.fillStyle = '#ff3b3b';
     ctx.beginPath();
     const teeth = 12;
     for(let i = 0; i <= teeth; i++){
       const a = (i/teeth) * Math.PI*2;
-      const r = (i % 2 === 0) ? SAW_RADIUS : SAW_RADIUS*0.72;
+      const r = (i % 2 === 0) ? radius : radius*0.72;
       const px = Math.cos(a)*r, py = Math.sin(a)*r;
       if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.fill();
 
-    // dark center hub
     ctx.fillStyle = '#3a0a0a';
     ctx.beginPath();
-    ctx.arc(0, 0, SAW_RADIUS*0.35, 0, Math.PI*2);
+    ctx.arc(0, 0, radius*0.35, 0, Math.PI*2);
     ctx.fill();
 
     ctx.restore();
 
-    // glow ring, matches the reference's look
     ctx.strokeStyle = 'rgba(255,59,59,0.3)';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(sx, sy, SAW_RADIUS+8, 0, Math.PI*2);
+    ctx.arc(sx, sy, radius+8, 0, Math.PI*2);
     ctx.stroke();
+  }
+
+  function drawSaw(){
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    const sawWx = nearestWorldX(car.worldX, SAW_LOCAL_X);
+    const sx = sawWx - camOffset;
+    if(sx < -60 || sx > W+60) return;
+    const sy = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
+    drawSawShape(sx, sy, SAW_RADIUS, sawSpin);
+  }
+
+  function drawSaw2(){
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    const sawWx = nearestWorldX(car.worldX, SAW2_LOCAL_X);
+    const sx = sawWx - camOffset;
+    if(sx < -60 || sx > W+60) return;
+    const sy = (H*0.6) - saw2HeightAt(gameTime);
+    drawSawShape(sx, sy, SAW2_RADIUS, -sawSpin*1.3);
   }
 
   function drawWatcher(){
@@ -1577,45 +1599,85 @@ try {
     ctx.translate(x, y);
     ctx.rotate(rotation * Math.PI/180);
 
-    // wheels — bike proportions, wider stance than a boxy car
-    ctx.fillStyle = '#14100a';
-    ctx.beginPath(); ctx.arc(-CAR_W*0.4, CAR_H*0.55, WHEEL_R, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(CAR_W*0.4, CAR_H*0.55, WHEEL_R, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,217,122,0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(-CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(CAR_W*0.4, CAR_H*0.55, WHEEL_R*0.4, 0, Math.PI*2); ctx.stroke();
+    const wx1 = -CAR_W*0.4, wx2 = CAR_W*0.4, wy = CAR_H*0.55;
 
-    // spokes rotating with wheelSpin so the wheels visibly turn while driving
-    ctx.strokeStyle = 'rgba(255,217,122,0.7)';
-    ctx.lineWidth = 1.2;
-    [-CAR_W*0.4, CAR_W*0.4].forEach(wx=>{
-      for(let s = 0; s < 3; s++){
-        const a = wheelSpin + s * (Math.PI*2/3);
+    // wheels — dark tire, amber rim
+    [wx1, wx2].forEach(wxp=>{
+      ctx.fillStyle = '#0d0906';
+      ctx.beginPath(); ctx.arc(wxp, wy, WHEEL_R, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = '#ffd97a';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(wxp, wy, WHEEL_R*0.55, 0, Math.PI*2); ctx.stroke();
+    });
+
+    // spokes rotating with wheelSpin so the wheels visibly turn
+    ctx.strokeStyle = 'rgba(255,217,122,0.8)';
+    ctx.lineWidth = 1.3;
+    [wx1, wx2].forEach(wxp=>{
+      for(let s = 0; s < 4; s++){
+        const a = wheelSpin + s*(Math.PI/2);
         ctx.beginPath();
-        ctx.moveTo(wx, CAR_H*0.55);
-        ctx.lineTo(wx + Math.cos(a)*WHEEL_R*0.85, CAR_H*0.55 + Math.sin(a)*WHEEL_R*0.85);
+        ctx.moveTo(wxp, wy);
+        ctx.lineTo(wxp + Math.cos(a)*WHEEL_R*0.5, wy + Math.sin(a)*WHEEL_R*0.5);
         ctx.stroke();
       }
     });
 
-    // thin frame connecting the wheels
-    ctx.strokeStyle = '#ffd97a';
-    ctx.lineWidth = 4;
+    // solid tapered body — a real fuselage shape instead of a thin
+    // frame line, curving up to a seat hump then down to the front
+    ctx.fillStyle = '#ffd97a';
     ctx.beginPath();
-    ctx.moveTo(-CAR_W*0.4, CAR_H*0.35);
-    ctx.lineTo(0, -CAR_H*0.15);
-    ctx.lineTo(CAR_W*0.4, CAR_H*0.35);
+    ctx.moveTo(wx1+4, wy-2);
+    ctx.quadraticCurveTo(-CAR_W*0.1, -CAR_H*0.5, CAR_W*0.1, -CAR_H*0.75);
+    ctx.quadraticCurveTo(CAR_W*0.32, -CAR_H*0.55, wx2-2, wy-4);
+    ctx.quadraticCurveTo(CAR_W*0.15, wy+2, -CAR_W*0.05, wy-4);
+    ctx.closePath();
+    ctx.fill();
+
+    // dark accent stripe along the body
+    ctx.strokeStyle = '#8a5a10';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(wx1+8, wy-6);
+    ctx.quadraticCurveTo(0, -CAR_H*0.35, wx2-8, wy-8);
     ctx.stroke();
 
-    // rider, hunched forward over the frame
-    ctx.fillStyle = '#0d0a04';
+    // small windscreen up front
+    ctx.fillStyle = 'rgba(180,220,255,0.55)';
     ctx.beginPath();
-    ctx.ellipse(-CAR_W*0.02, -CAR_H*0.55, CAR_W*0.16, CAR_H*0.42, -0.3, 0, Math.PI*2);
+    ctx.moveTo(CAR_W*0.28, -CAR_H*0.6);
+    ctx.lineTo(CAR_W*0.42, -CAR_H*0.35);
+    ctx.lineTo(CAR_W*0.30, -CAR_H*0.4);
+    ctx.closePath();
     ctx.fill();
+
+    // exhaust out back
+    ctx.fillStyle = '#5a5348';
     ctx.beginPath();
-    ctx.arc(CAR_W*0.14, -CAR_H*0.95, CAR_H*0.22, 0, Math.PI*2);
+    ctx.ellipse(wx1-2, wy+2, 5, 2.5, 0.3, 0, Math.PI*2);
     ctx.fill();
+
+    // rider — torso, helmet with a visor, arm reaching to the bars
+    ctx.fillStyle = '#14100a';
+    ctx.beginPath();
+    ctx.ellipse(CAR_W*0.02, -CAR_H*0.95, CAR_W*0.14, CAR_H*0.4, -0.5, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffd97a';
+    ctx.beginPath();
+    ctx.arc(CAR_W*0.18, -CAR_H*1.3, CAR_H*0.24, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(100,180,255,0.6)';
+    ctx.beginPath();
+    ctx.arc(CAR_W*0.22, -CAR_H*1.28, CAR_H*0.12, -0.5, 1.2);
+    ctx.fill();
+
+    ctx.strokeStyle = '#14100a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(CAR_W*0.05, -CAR_H*0.85);
+    ctx.lineTo(CAR_W*0.35, -CAR_H*0.5);
+    ctx.stroke();
 
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -1718,7 +1780,7 @@ try {
         const enteringGap = !isGap(prevWorldX) && isGap(car.worldX);
         if(enteringGap){
           car.grounded = false;
-          car.vy = -(0.28 + car.speed*3.0); // retuned for the lower top speed — still overshoots if held flat-out
+          car.vy = -(0.20 + car.speed*2.1); // cut way down — jumps were launching off the top of the screen before
           car.launchZone = curInfo.globalIdx;
           flipAccum = 0;
           rotationTrail.length = 0;
@@ -1748,10 +1810,15 @@ try {
 
         // fell past the bottom of the track without clearing the gap —
         // a real fail state, not just a bad landing
-        const sawWx = nearestSawWorldX(car.worldX);
+        const sawWx = nearestWorldX(car.worldX, SAW_LOCAL_X);
         const sawScreenY = (H*0.6) - SAW_HEIGHT_ABOVE_BASE;
         const sawDist = Math.hypot(car.worldX - sawWx, car.y - sawScreenY);
+        const saw2Wx = nearestWorldX(car.worldX, SAW2_LOCAL_X);
+        const saw2ScreenY = (H*0.6) - saw2HeightAt(gameTime);
+        const saw2Dist = Math.hypot(car.worldX - saw2Wx, car.y - saw2ScreenY);
         if(sawDist < SAW_RADIUS + 14){
+          explode();
+        } else if(saw2Dist < SAW2_RADIUS + 14){
           explode();
         } else if(car.y > H + 60){
           explode();
@@ -1782,6 +1849,7 @@ try {
       // matches how fast the bike is really moving
       wheelSpin += (car.speed * dt) / WHEEL_R;
       sawSpin += dt * 0.003;
+      gameTime += dt;
 
       const speedRatio = car.speed / MAX_SPEED;
       updateEngineSound(Math.max(0, Math.min(1, speedRatio)), car.grounded);
@@ -1794,6 +1862,7 @@ try {
     drawBoostPad();
     drawRocks();
     drawSaw();
+    drawSaw2();
     drawWatcher();
     drawSpeedLines();
     drawCar();
@@ -1809,6 +1878,7 @@ try {
     drawBoostPad();
     drawRocks();
     drawSaw();
+    drawSaw2();
     drawWatcher();
     drawCar();
   }
