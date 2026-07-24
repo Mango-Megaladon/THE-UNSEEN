@@ -1188,11 +1188,11 @@ try {
 
   // ---- tunables ----
   const GRAVITY = 0.0028;
-  const ACCEL = 0.00055;
-  const FRICTION = 0.00035;
-  const MAX_SPEED = 0.40;
+  const ACCEL = 0.00045;
+  const FRICTION = 0.00030;
+  const MAX_SPEED = 0.32;
   const MIN_SPEED = 0.15;
-  const FLIP_RATE = 0.62;          // degrees per ms while holding + airborne
+  const FLIP_RATE = 0.35;          // degrees per ms while holding + airborne — slower, more controlled
   const SAFE_LANDING_ANGLE = 55;   // degrees of tilt tolerated on landing
   const SCORE_RATE = 0.03;         // score per world-unit of progress
   const FLIP_BONUS = 150;
@@ -1200,12 +1200,12 @@ try {
   const CAR_W = 46, CAR_H = 20, WHEEL_R = 9;
   const WHEEL_BOTTOM_OFFSET = CAR_H*0.55 + WHEEL_R; // how far below car.y the wheel-bottoms actually sit
 
-  // real gap-jumps with genuine variety — different gap widths and
-  // different recovery-zone lengths so it's not the same jump on repeat.
-  // tested via simulation before tuning: always holding eventually
-  // overshoots a landing zone and crashes, never holding just stalls,
-  // and managing speed sensibly is what actually gets you through
+  // real gap-jumps with genuine variety, plus one big jump with a boost
+  // pad right before it — tested via simulation: the boost gives enough
+  // speed and hangtime (1300+ms) to comfortably land a full flip even
+  // at the slower spin rate, without needing to cut it dangerously close
   const RAMP_LEN = 140, LAND_LEN = 120;
+  const BOOST_LEN = 60, BOOST_SET_SPEED = 0.55;
   const JUMP_VARIANTS = [
     { gap: 160, recovery: 200 },
     { gap: 230, recovery: 160 },
@@ -1213,29 +1213,32 @@ try {
     { gap: 260, recovery: 180 },
     { gap: 180, recovery: 150 },
     { gap: 200, recovery: 220 },
+    { gap: 380, recovery: 260, big: true }, // the big jump
   ];
   const zones = (function(){
     const list = [];
     let cursor = 280;
     JUMP_VARIANTS.forEach((v, i) => {
-      const rampStart = cursor;
+      let rampStart = cursor;
+      let boostStart = null;
+      if(v.big){ boostStart = rampStart; rampStart = boostStart + BOOST_LEN; }
       const gapStart = rampStart + RAMP_LEN;
       const landStart = gapStart + v.gap;
       const recoveryStart = landStart + LAND_LEN;
       const zoneEnd = recoveryStart + v.recovery;
-      list.push({ idx: i, rampStart, gapStart, landStart, zoneEnd });
+      list.push({ idx: i, boostStart, rampStart, gapStart, landStart, zoneEnd, big: !!v.big });
       cursor = zoneEnd;
     });
     return list;
   })();
   const CYCLE_LEN = zones[zones.length-1].zoneEnd;
 
-  // spinning saw hazard — floats in the air over the zone 1 gap, high
-  // enough that only a real burst of speed clears it. Simulated first:
-  // ~0.30 speed gives an arc that clears it, ~0.25 does not.
-  const SAW_ZONE_IDX = 1;
+  // spinning saw hazard — moved onto the very first jump so it's
+  // guaranteed to be seen instead of sitting on a later jump players
+  // might not reach
+  const SAW_ZONE_IDX = 0;
   const SAW_LOCAL_X = (zones[SAW_ZONE_IDX].gapStart + zones[SAW_ZONE_IDX].landStart) / 2;
-  const SAW_HEIGHT_ABOVE_BASE = 210;
+  const SAW_HEIGHT_ABOVE_BASE = 100; // tested: clears with margin above ~0.24 speed, only very slow runs get caught
   const SAW_RADIUS = 22;
   let sawSpin = 0;
 
@@ -1251,6 +1254,10 @@ try {
   function isGap(wx){
     const { z, local } = getZoneInfo(wx);
     return local >= z.gapStart && local < z.landStart;
+  }
+  function isBoost(wx){
+    const { z, local } = getZoneInfo(wx);
+    return z.boostStart !== null && local >= z.boostStart && local < z.rampStart;
   }
   function groundHeight(wx){
     const baseline = H * 0.6;
@@ -1442,6 +1449,35 @@ try {
       if(sx === 0) ctx.moveTo(sx, gy); else ctx.lineTo(sx, gy);
     }
     ctx.stroke();
+  }
+
+  // boost pad — glowing strip with forward chevrons right before the
+  // big jump, so it's obvious there's a speed boost there
+  const boostZoneDef = zones.find(z => z.boostStart !== null);
+  function drawBoostPad(){
+    if(!boostZoneDef) return;
+    const camOffset = car.worldX - W*CAR_SCREEN_X_RATIO;
+    const zoneMid = (boostZoneDef.boostStart + boostZoneDef.rampStart) / 2;
+    const cycleNum = Math.round((car.worldX - zoneMid) / CYCLE_LEN);
+    const wStart = cycleNum*CYCLE_LEN + boostZoneDef.boostStart;
+    const wEnd = cycleNum*CYCLE_LEN + boostZoneDef.rampStart;
+    const sx0 = wStart - camOffset, sx1 = wEnd - camOffset;
+    if(sx1 < -20 || sx0 > W+20) return;
+
+    const gy = groundHeight(wStart);
+    ctx.fillStyle = 'rgba(80,200,255,0.28)';
+    ctx.fillRect(sx0, gy-4, sx1-sx0, 8);
+
+    ctx.strokeStyle = '#50c8ff';
+    ctx.lineWidth = 3;
+    for(let i = 0; i < 3; i++){
+      const ax = sx0 + (sx1-sx0) * (i+0.5)/3;
+      ctx.beginPath();
+      ctx.moveTo(ax-8, gy-14);
+      ctx.lineTo(ax+5, gy-8);
+      ctx.lineTo(ax-8, gy-2);
+      ctx.stroke();
+    }
   }
 
   // jagged rocks filling the gap — falling in is fatal no matter which
@@ -1661,8 +1697,15 @@ try {
     if(state === 'playing'){
       // horizontal speed
       if(car.grounded){
-        if(holding) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
-        else car.speed = Math.max(0, car.speed - FRICTION*dt);
+        if(isBoost(car.worldX)){
+          car.speed = BOOST_SET_SPEED;
+        } else if(holding){
+          // only accelerate UP toward max — don't let this instantly
+          // cancel a boost that's currently above MAX_SPEED
+          if(car.speed < MAX_SPEED) car.speed = Math.min(MAX_SPEED, car.speed + ACCEL*dt);
+        } else {
+          car.speed = Math.max(0, car.speed - FRICTION*dt);
+        }
       }
       const prevWorldX = car.worldX;
       car.worldX += car.speed * dt;
@@ -1748,6 +1791,7 @@ try {
 
     drawBackground();
     drawTerrain();
+    drawBoostPad();
     drawRocks();
     drawSaw();
     drawWatcher();
@@ -1762,6 +1806,7 @@ try {
   function drawIdle(){
     drawBackground();
     drawTerrain();
+    drawBoostPad();
     drawRocks();
     drawSaw();
     drawWatcher();
