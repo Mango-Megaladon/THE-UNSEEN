@@ -259,6 +259,22 @@
     letter-spacing: 3px; margin-bottom: 10px; text-shadow: 0 0 20px rgba(255,184,77,0.4);
   }
   .game-overlay-sub { font-size: 12px; letter-spacing: 2px; color: var(--ink-dim); }
+  .game-stats-row {
+    display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+    margin-bottom: 18px; font-size: 11px; letter-spacing: 1.5px;
+  }
+  .game-stats-row .stat { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .game-stats-row .stat-label { color: var(--amber-faint); }
+  .game-stats-row .stat-value { color: var(--ink); font-weight: 700; font-size: 13px; }
+  .game-overlay.crashed { animation: crashPulse 0.5s ease; }
+  @keyframes crashPulse {
+    0% { background: rgba(255,80,40,0.55); }
+    100% { background: rgba(5,3,1,0.72); }
+  }
+  .new-best-tag {
+    color: #4ec96a; font-size: 12px; letter-spacing: 2px; font-weight: 700;
+    margin-top: 8px; text-shadow: 0 0 10px rgba(78,201,106,0.5);
+  }
 
   #comparison { border-top: 1px solid rgba(255,184,77,0.12); }
   .compare-table { margin-top: 26px; border: 1px solid rgba(255,184,77,0.2); border-radius: 4px; overflow: hidden; }
@@ -502,9 +518,11 @@
         <span id="gameBest">BEST: 0</span>
       </div>
       <div id="gameOverlay" class="game-overlay">
+        <div class="game-stats-row" id="gameStatsRow"></div>
         <div class="game-overlay-title" id="gameOverlayTitle">DRIVE</div>
         <div class="game-overlay-sub" id="gameOverlaySub">HOLD TO ACCELERATE — HOLD IN THE AIR TO FLIP</div>
       </div>
+      <audio id="driveMusic" src="drive_music.wav" loop preload="auto"></audio>
     </div>
     <div class="hint-tap">HOLD TO DRIVE · HOLD WHILE AIRBORNE TO FLIP · LAND UPRIGHT OR EXPLODE</div>
   </div>
@@ -1050,9 +1068,12 @@ try {
   const overlay = document.getElementById('gameOverlay');
   const overlayTitle = document.getElementById('gameOverlayTitle');
   const overlaySub = document.getElementById('gameOverlaySub');
+  const statsRow = document.getElementById('gameStatsRow');
   const scoreEl = document.getElementById('gameScore');
   const bestEl = document.getElementById('gameBest');
   const frame = canvas.closest('.game-frame');
+  const driveMusic = document.getElementById('driveMusic');
+  const menuMusic = document.getElementById('menuMusic');
 
   let W, H, dpr;
   function resize(){
@@ -1064,6 +1085,57 @@ try {
   }
   resize();
   window.addEventListener('resize', resize);
+
+  // ---- live engine sound, synthesized rather than a static file so its
+  // pitch/volume can react to speed in real time ----
+  let audioCtx, engineOsc, engineGain, engineFilter;
+  function ensureEngineAudio(){
+    if(audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      engineOsc = audioCtx.createOscillator();
+      engineOsc.type = 'sawtooth';
+      engineFilter = audioCtx.createBiquadFilter();
+      engineFilter.type = 'lowpass';
+      engineFilter.frequency.value = 400;
+      engineGain = audioCtx.createGain();
+      engineGain.gain.value = 0;
+      engineOsc.connect(engineFilter);
+      engineFilter.connect(engineGain);
+      engineGain.connect(audioCtx.destination);
+      engineOsc.frequency.value = 60;
+      engineOsc.start();
+    } catch(e){ /* Web Audio unavailable — game still works without engine sound */ }
+  }
+  function updateEngineSound(speedRatio, active){
+    if(!engineOsc) return;
+    const targetFreq = 55 + speedRatio * 140;
+    const targetGain = active ? 0.05 + speedRatio * 0.05 : 0;
+    engineOsc.frequency.setTargetAtTime(targetFreq, audioCtx.currentTime, 0.05);
+    engineGain.gain.setTargetAtTime(targetGain, audioCtx.currentTime, 0.08);
+  }
+  function stopEngineSound(){
+    if(engineGain) engineGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15);
+  }
+
+  function switchToDriveMusic(){
+    if(menuMusic){
+      menuMusic.volume = Math.max(0, menuMusic.volume - 0.25) || 0.08;
+    }
+    if(driveMusic){
+      driveMusic.volume = 0.32;
+      driveMusic.currentTime = 0;
+      driveMusic.play().catch(()=>{});
+    }
+  }
+  function switchToMenuMusic(){
+    if(driveMusic){
+      driveMusic.pause();
+    }
+    if(menuMusic && !document.body.classList.contains('music-off')){
+      menuMusic.volume = 0.35;
+    }
+  }
 
   // ---- tunables ----
   const GRAVITY = 0.0028;
@@ -1123,6 +1195,29 @@ try {
   best = loadBest();
   bestEl.textContent = 'BEST: ' + best;
 
+  // rank and challenge are both based on the player's own history only —
+  // there's no real player base to compare against yet, so nothing here
+  // claims a percentile or ranking against other people
+  function computeRank(bestScore){
+    if(bestScore >= 500) return 'ELITE';
+    if(bestScore >= 250) return 'SKILLED';
+    if(bestScore >= 100) return 'RISING';
+    return 'ROOKIE';
+  }
+  function challengeText(bestScore){
+    if(bestScore === 0) return 'SCORE YOUR FIRST 50';
+    return 'BEAT ' + bestScore;
+  }
+
+  function renderReadyStats(){
+    statsRow.innerHTML =
+      '<div class="stat"><span class="stat-label">RANK</span><span class="stat-value">' + computeRank(best) + '</span></div>' +
+      '<div class="stat"><span class="stat-label">HIGH SCORE</span><span class="stat-value">' + best + '</span></div>' +
+      '<div class="stat"><span class="stat-label">VEHICLE</span><span class="stat-value">STANDARD</span></div>' +
+      '<div class="stat"><span class="stat-label">CHALLENGE</span><span class="stat-value">' + challengeText(best) + '</span></div>';
+  }
+  renderReadyStats();
+
   function resetGame(){
     car = {
       worldX: 0, y: groundHeight(0), vy: 0,
@@ -1159,6 +1254,10 @@ try {
       resetGame();
       state = 'playing';
       overlay.classList.add('hidden');
+      overlay.classList.remove('crashed');
+      statsRow.innerHTML = '';
+      ensureEngineAudio();
+      switchToDriveMusic();
       requestAnimationFrame(loop);
     }
   }
@@ -1183,16 +1282,23 @@ try {
   function explode(){
     state = 'gameover';
     const finalScore = Math.floor(score);
+    let isNewBest = false;
     if(finalScore > best){
       best = finalScore;
       saveBest(best);
       bestEl.textContent = 'BEST: ' + best;
+      isNewBest = true;
     }
     const carScreenX = W * CAR_SCREEN_X_RATIO;
     spawnBurst(carScreenX, car.y, '#ff8a3d', 22);
     spawnBurst(carScreenX, car.y, '#ffd97a', 10);
+    switchToMenuMusic();
+    stopEngineSound();
+    overlay.classList.add('crashed');
+    setTimeout(()=> overlay.classList.remove('crashed'), 500);
     overlayTitle.textContent = 'DESTROYED';
     overlaySub.textContent = 'SCORE ' + finalScore + (flipCount ? ' · ' + flipCount + ' FLIPS' : '') + ' — HOLD TO RETRY';
+    statsRow.innerHTML = isNewBest ? '<div class="new-best-tag">NEW BEST!</div>' : '';
     overlay.classList.remove('hidden');
   }
 
@@ -1419,6 +1525,9 @@ try {
 
       watcherOffset = Math.max(140, 240 - score*0.01);
       scoreEl.textContent = Math.floor(score);
+
+      const speedRatio = (car.speed - MIN_SPEED) / (MAX_SPEED - MIN_SPEED);
+      updateEngineSound(Math.max(0, Math.min(1, speedRatio)), car.grounded);
     }
 
     updateEffects(dt);
