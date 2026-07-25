@@ -286,9 +286,16 @@
     position: absolute; top: 0; right: 0; width: 60%; height: 100%; z-index: 2;
     touch-action: none;
   }
+  .camera-btn {
+    position: absolute; top: 10px; left: 12px; z-index: 6;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(255,184,77,0.4); border-radius: 4px;
+    color: var(--amber); font-family: var(--body); font-weight: 700; font-size: 10px;
+    letter-spacing: 0.5px; padding: 6px 10px; touch-action: none;
+  }
+  .camera-btn:active { background: rgba(255,184,77,0.2); }
   .fps-hud {
-    position: absolute; top: 10px; left: 12px; right: 12px; z-index: 4;
-    display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+    position: absolute; top: 10px; left: 100px; right: 12px; z-index: 4;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none;
   }
   .fps-timer {
     font-family: var(--display); font-size: 16px; font-weight: 700;
@@ -592,6 +599,8 @@
     <p style="font-size:13px;max-width:520px;">We're about to prove exactly what this team can build. A real, playable game — made entirely by the developers behind THE UNSEEN — is landing here soon. Consider it proof of what to expect when the real thing launches.</p>
     <div class="game-frame" id="gameCanvasFrame">
       <canvas id="gameCanvas"></canvas>
+
+      <button class="camera-btn" id="cameraBtn">📷 CAMERA</button>
 
       <div class="fps-hud">
         <div class="fps-timer" id="fpsTimer">0:00</div>
@@ -1267,6 +1276,7 @@ try {
   const lookZone = document.getElementById('lookZone');
   const sprintBtn = document.getElementById('sprintBtn');
   const jumpBtn = document.getElementById('jumpBtn');
+  const cameraBtn = document.getElementById('cameraBtn');
 
   let W, H, dpr;
   function resize(){
@@ -1349,6 +1359,7 @@ try {
   const WIN_DIST = 0.6;
 
   let state = 'ready';
+  let cameraMode = 0; // 0 = first person, 1 = second (facing you), 2 = third (behind you)
   let player, monster, monsterPath, monsterPathAt, elapsed, lastTime;
   let stamina, sprinting, jumping, jumpT;
   let joystickVec = {x:0,y:0};
@@ -1390,6 +1401,8 @@ try {
     jumpT = 0;
     joystickVec = {x:0,y:0};
     lookDelta = 0;
+    cameraMode = 0;
+    if(cameraBtn) cameraBtn.textContent = '📷 1ST PERSON';
   }
   resetGame();
 
@@ -1473,7 +1486,7 @@ try {
       joystickVec = { x: kx/maxR, y: ky/maxR };
     }
     if(lookActive && e.pointerId===lookId){
-      lookDelta += (e.clientX - lookLastX) * TURN_SPEED * 14;
+      lookDelta += (e.clientX - lookLastX) * TURN_SPEED * 7;
       lookLastX = e.clientX;
     }
   });
@@ -1497,6 +1510,11 @@ try {
   sprintBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); sprinting = true; });
   sprintBtn.addEventListener('pointerup', ()=> sprinting = false);
   sprintBtn.addEventListener('pointerleave', ()=> sprinting = false);
+  cameraBtn.addEventListener('pointerdown', (e)=>{
+    e.preventDefault(); e.stopPropagation();
+    cameraMode = (cameraMode + 1) % 3;
+    cameraBtn.textContent = ['📷 1ST PERSON','📷 2ND PERSON','📷 3RD PERSON'][cameraMode];
+  });
   jumpBtn.addEventListener('pointerdown', (e)=>{
     e.preventDefault();
     if(state!=='playing') return;
@@ -1550,7 +1568,27 @@ try {
 
   // ---------- raycasting render ----------
   const zbuffer = [];
+  // camera can be detached from the player's true position for
+  // second/third person — but only visually. Movement and collision
+  // always use the player's real x/y, never the camera's.
+  function getCamera(){
+    if(cameraMode === 0) return { x: player.x, y: player.y, angle: player.angle, showPlayer: false };
+    const dist = 0.42;
+    if(cameraMode === 2){
+      const cx = player.x - Math.cos(player.angle)*dist;
+      const cy = player.y - Math.sin(player.angle)*dist;
+      const safe = !isWall(cx,cy);
+      return { x: safe?cx:player.x, y: safe?cy:player.y, angle: player.angle, showPlayer: true };
+    }
+    // second person — camera sits in front of you, looking back at you
+    const cx = player.x + Math.cos(player.angle)*dist;
+    const cy = player.y + Math.sin(player.angle)*dist;
+    const safe = !isWall(cx,cy);
+    return { x: safe?cx:player.x, y: safe?cy:player.y, angle: player.angle+Math.PI, showPlayer: true };
+  }
+
   function render(bobOffset){
+    const cam = getCamera();
     ctx.fillStyle = '#1a1508';
     ctx.fillRect(0,0,W,H/2);
     ctx.fillStyle = '#050403';
@@ -1559,13 +1597,13 @@ try {
     const rayCount = Math.ceil(W/3);
     zbuffer.length = rayCount;
     for(let i=0;i<rayCount;i++){
-      const rayAngle = player.angle - FOV/2 + (i/rayCount)*FOV;
+      const rayAngle = cam.angle - FOV/2 + (i/rayCount)*FOV;
       const dx = Math.cos(rayAngle), dy = Math.sin(rayAngle);
-      let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+      let mapX = Math.floor(cam.x), mapY = Math.floor(cam.y);
       const deltaDistX = Math.abs(1/dx), deltaDistY = Math.abs(1/dy);
       let stepX, sideDistX, stepY, sideDistY;
-      if(dx<0){ stepX=-1; sideDistX=(player.x-mapX)*deltaDistX; } else { stepX=1; sideDistX=(mapX+1-player.x)*deltaDistX; }
-      if(dy<0){ stepY=-1; sideDistY=(player.y-mapY)*deltaDistY; } else { stepY=1; sideDistY=(mapY+1-player.y)*deltaDistY; }
+      if(dx<0){ stepX=-1; sideDistX=(cam.x-mapX)*deltaDistX; } else { stepX=1; sideDistX=(mapX+1-cam.x)*deltaDistX; }
+      if(dy<0){ stepY=-1; sideDistY=(cam.y-mapY)*deltaDistY; } else { stepY=1; sideDistY=(mapY+1-cam.y)*deltaDistY; }
       let hit=false, side, guard=0;
       while(!hit && guard++<64){
         if(sideDistX<sideDistY){ sideDistX+=deltaDistX; mapX+=stepX; side=0; }
@@ -1573,13 +1611,12 @@ try {
         if(isWall(mapX,mapY)) hit=true;
       }
       let dist = side===0 ? (sideDistX-deltaDistX) : (sideDistY-deltaDistY);
-      dist *= Math.cos(rayAngle - player.angle);
+      dist *= Math.cos(rayAngle - cam.angle);
       dist = Math.max(0.05, dist);
       zbuffer[i] = dist;
 
       const wallH = Math.min(H*1.4, H/dist);
       const x0 = i*3;
-      const isExitWall = false;
       const shade = Math.max(0.12, 1 - dist/9) * (side===1 ? 0.75 : 1);
       const flick = 0.94 + Math.sin(elapsed*0.006 + mapX*3 + mapY*2)*0.06;
       const baseR = 90, baseG = 68, baseB = 26;
@@ -1594,29 +1631,87 @@ try {
     ctx.fillStyle = grad;
     ctx.fillRect(0,0,W,H);
 
-    drawSprite(EXIT.x, EXIT.y, bobOffset, '#8fe0ff', 0.4, true);
-    drawSprite(monster.x, monster.y, bobOffset, '#ff3b3b', 0.55, false);
+    drawExitSprite(cam, bobOffset);
+    drawMonsterSprite(cam, bobOffset);
+    if(cam.showPlayer) drawPlayerSprite(cam, bobOffset);
   }
 
-  function drawSprite(sx, sy, bobOffset, color, sizeScale, glow){
-    const dx = sx-player.x, dy = sy-player.y;
+  // shared projection math: world position -> screen X, apparent size,
+  // and whether a wall occludes it. Returns null if off-screen/hidden.
+  function projectSprite(cam, sx, sy, sizeScale){
+    const dx = sx-cam.x, dy = sy-cam.y;
     const dist = Math.hypot(dx,dy);
-    let angle = Math.atan2(dy,dx) - player.angle;
+    let angle = Math.atan2(dy,dx) - cam.angle;
     while(angle > Math.PI) angle -= Math.PI*2;
     while(angle < -Math.PI) angle += Math.PI*2;
-    if(Math.abs(angle) > FOV/2 + 0.3) return;
+    if(Math.abs(angle) > FOV/2 + 0.3) return null;
     const screenX = (0.5 + angle/FOV) * W;
     const size = Math.min(H*1.2, (H/dist) * sizeScale);
-    const col = Math.floor((screenX)/3);
-    if(col>=0 && col<zbuffer.length && zbuffer[col] < dist-0.3) return; // occluded by a wall
+    const col = Math.floor(screenX/3);
+    if(col>=0 && col<zbuffer.length && zbuffer[col] < dist-0.3) return null;
+    return { screenX, size, dist };
+  }
 
+  function drawExitSprite(cam, bobOffset){
+    const p = projectSprite(cam, EXIT.x, EXIT.y, 0.4);
+    if(!p) return;
     ctx.save();
-    if(glow){
-      ctx.shadowColor = color; ctx.shadowBlur = 20;
-    }
-    ctx.fillStyle = color;
+    ctx.shadowColor = '#8fe0ff'; ctx.shadowBlur = 20;
+    ctx.fillStyle = '#8fe0ff';
     ctx.beginPath();
-    ctx.ellipse(screenX, H/2+bobOffset, size*0.35, size*0.5, 0, 0, Math.PI*2);
+    ctx.ellipse(p.screenX, H/2+bobOffset, p.size*0.35, p.size*0.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // The Watcher — a real silhouette with glowing eyes, not a plain
+  // colored blob: dark jagged-edged body, red eyes that pulse
+  function drawMonsterSprite(cam, bobOffset){
+    const p = projectSprite(cam, monster.x, monster.y, 0.62);
+    if(!p) return;
+    const cx = p.screenX, cy = H/2+bobOffset;
+    const s = p.size;
+    ctx.save();
+    ctx.fillStyle = '#160a0a';
+    ctx.beginPath();
+    const spikes = 7;
+    for(let i=0;i<=spikes;i++){
+      const t = i/spikes;
+      const ang = -Math.PI/2 + t*Math.PI;
+      const jag = (i%2===0) ? 1 : 0.82;
+      const rx = Math.sin(ang)*s*0.32*jag, ry = -Math.cos(ang)*s*0.5*jag;
+      if(i===0) ctx.moveTo(cx+rx, cy+ry); else ctx.lineTo(cx+rx, cy+ry);
+    }
+    ctx.lineTo(cx-s*0.3, cy+s*0.5);
+    ctx.lineTo(cx+s*0.3, cy+s*0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    const eyePulse = 0.7 + Math.sin(elapsed*0.012)*0.3;
+    ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = 12*eyePulse;
+    ctx.fillStyle = '#ff3b3b';
+    [-1,1].forEach(side=>{
+      ctx.beginPath();
+      ctx.ellipse(cx+side*s*0.11, cy-s*0.14, s*0.045, s*0.07, 0, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  // your own character, visible only in second/third person
+  function drawPlayerSprite(cam, bobOffset){
+    const p = projectSprite(cam, player.x, player.y, 0.5);
+    if(!p) return;
+    const cx = p.screenX, cy = H/2+bobOffset;
+    const s = p.size;
+    ctx.save();
+    ctx.fillStyle = '#ffd97a';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy+s*0.08, s*0.22, s*0.32, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#14100a';
+    ctx.beginPath();
+    ctx.arc(cx, cy-s*0.28, s*0.16, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
   }
