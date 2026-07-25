@@ -179,6 +179,18 @@
     display: none; align-items: center; justify-content: center; padding: 20px;
   }
   #settingsOverlay.open { display: flex; }
+  #loginOverlay {
+    position: fixed; inset: 0; z-index: 50; background: rgba(2,1,0,0.82);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #loginOverlay.open { display: flex; }
+  .login-input {
+    width: 100%; box-sizing: border-box; padding: 12px 14px; margin-bottom: 10px;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,184,77,0.25); border-radius: 4px;
+    color: var(--ink); font-family: var(--body); font-size: 14px;
+  }
+  .login-input::placeholder { color: var(--ink-dim); }
+  .login-error { color: #ff6a6a; font-size: 12px; min-height: 16px; margin-bottom: 4px; }
   .settings-panel {
     width: 100%; max-width: 420px; background: var(--bg-soft);
     border: 1px solid rgba(255,184,77,0.3); border-radius: 6px; padding: 28px;
@@ -476,6 +488,8 @@
     footer { flex-direction: column; text-align: center; }
   }
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 </head>
 <body class="intro-locked">
 
@@ -534,6 +548,17 @@
       </div>
       <button class="pill-toggle off" id="motionPill">OFF</button>
     </div>
+  </div>
+</div>
+
+<div id="loginOverlay" role="dialog" aria-modal="true" aria-labelledby="loginHeading">
+  <div class="settings-panel">
+    <h3 id="loginHeading">TEAM ACCESS <button class="settings-close" id="loginClose" aria-label="Close login">✕</button></h3>
+    <p style="font-size:12px;color:var(--ink-dim);margin:0 0 16px;">Sign in with your team account to preview the 2D game early.</p>
+    <input type="email" id="loginEmail" class="login-input" placeholder="Email" autocomplete="username">
+    <input type="password" id="loginPassword" class="login-input" placeholder="Password" autocomplete="current-password">
+    <div id="loginError" class="login-error"></div>
+    <button class="menu-btn" id="loginSubmit" style="width:100%;margin-top:6px;">SIGN IN</button>
   </div>
 </div>
 
@@ -1184,49 +1209,84 @@ setupExpandableList('#faqList');
   const progressEl = document.getElementById('countdownProgress');
   const teaserOverlay = document.getElementById('teaserOverlay');
   const teamAccessBtn = document.getElementById('teamAccessBtn');
+  const loginOverlay = document.getElementById('loginOverlay');
+  const loginClose = document.getElementById('loginClose');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const loginSubmit = document.getElementById('loginSubmit');
   const target = new Date('2026-07-28T18:00:00Z').getTime();
   const start = target - 4*24*60*60*1000;
   const teamWindowStart = target - 2*24*60*60*1000; // developers/marketing can unlock from here on
 
-  // NOTE: these are a practical gate for trusted team use, not real
-  // security — this is a plain static website with no server or login
-  // system, so anyone who reads the page's code could find these.
-  // Change them to your own private codes if you want.
-  const OWNER_CODE = 'VIPEROWNER';
-  const TEAM_CODE = 'VIPERTEAM';
+  // CHANGE THIS to your real email — this account gets anytime access,
+  // no matter how far ahead of release. Every other real account you
+  // create in the Firebase console (Authentication > Users) gets
+  // access starting 2 days before release.
+  const OWNER_EMAIL = 'jgtemail@icloud.com';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD6zNBvK-sp3wS1duEpZhTEnop7RFYWUsI",
+    authDomain: "the-unseen-f03e8.firebaseapp.com",
+    projectId: "the-unseen-f03e8",
+    storageBucket: "the-unseen-f03e8.firebasestorage.app",
+    messagingSenderId: "25109219348",
+    appId: "1:25109219348:web:ae0e3bfbb5a434033fff01",
+    measurementId: "G-XM5GNYEFC9"
+  };
+  let auth;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+  } catch(e){ /* Firebase unavailable — team access simply won't unlock */ }
 
   function unlockGame(){
     if(teaserOverlay) teaserOverlay.style.display = 'none';
   }
 
-  if(teamAccessBtn){
-    teamAccessBtn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const stored = localStorage.getItem('theunseen_access');
-      if(stored === 'owner'){ unlockGame(); return; }
-      if(stored === 'team' && Date.now() >= teamWindowStart){ unlockGame(); return; }
-
-      const code = prompt('Team access code:');
-      if(code === OWNER_CODE){
-        localStorage.setItem('theunseen_access', 'owner');
+  if(auth){
+    auth.onAuthStateChanged(user=>{
+      if(!user) return;
+      const isOwner = user.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase();
+      if(isOwner || Date.now() >= teamWindowStart){
         unlockGame();
-      } else if(code === TEAM_CODE){
-        if(Date.now() >= teamWindowStart){
-          localStorage.setItem('theunseen_access', 'team');
-          unlockGame();
-        } else {
-          alert('This unlocks 2 days before release.');
-        }
-      } else if(code !== null){
-        alert('Incorrect code.');
       }
     });
   }
 
-  // auto-unlock on return visits if already verified
-  const stored = localStorage.getItem('theunseen_access');
-  if(stored === 'owner' || (stored === 'team' && Date.now() >= teamWindowStart)){
-    unlockGame();
+  if(teamAccessBtn){
+    teamAccessBtn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(auth && auth.currentUser){
+        const isOwner = auth.currentUser.email && auth.currentUser.email.toLowerCase() === OWNER_EMAIL.toLowerCase();
+        if(isOwner || Date.now() >= teamWindowStart){ unlockGame(); return; }
+        alert('This unlocks 2 days before release.');
+        return;
+      }
+      loginOverlay.classList.add('open');
+      loginError.textContent = '';
+    });
+  }
+  if(loginClose) loginClose.addEventListener('click', ()=> loginOverlay.classList.remove('open'));
+
+  if(loginSubmit){
+    loginSubmit.addEventListener('click', ()=>{
+      if(!auth){ loginError.textContent = 'Login unavailable right now.'; return; }
+      const email = loginEmail.value.trim(), pass = loginPassword.value;
+      if(!email || !pass){ loginError.textContent = 'Enter both fields.'; return; }
+      loginError.textContent = 'Signing in…';
+      auth.signInWithEmailAndPassword(email, pass).then(cred=>{
+        const isOwner = cred.user.email && cred.user.email.toLowerCase() === OWNER_EMAIL.toLowerCase();
+        loginOverlay.classList.remove('open');
+        if(isOwner || Date.now() >= teamWindowStart){
+          unlockGame();
+        } else {
+          alert('Signed in — this unlocks 2 days before release.');
+        }
+      }).catch(err=>{
+        loginError.textContent = 'Incorrect email or password.';
+      });
+    });
   }
 
   function tick(){
@@ -1360,7 +1420,7 @@ try {
 
   let state = 'ready';
   let cameraMode = 0; // 0 = first person, 1 = second (facing you), 2 = third (behind you)
-  let player, monster, monsterPath, monsterPathAt, elapsed, lastTime;
+  let player, monster, monsterPath, monsterPathAt, elapsed, lastTime, monsterBurstAt, monsterBurstEndAt;
   let stamina, sprinting, jumping, jumpT;
   let joystickVec = {x:0,y:0};
   let lookDelta = 0;
@@ -1393,6 +1453,8 @@ try {
     monster = { x: MONSTER_SPAWN.x, y: MONSTER_SPAWN.y };
     monsterPath = [];
     monsterPathAt = 0;
+    monsterBurstAt = 0;
+    monsterBurstEndAt = 0;
     elapsed = 0;
     lastTime = null;
     stamina = 100;
@@ -1440,16 +1502,40 @@ try {
   function playCaughtSound(){
     if(!audioCtx) return;
     const t0 = audioCtx.currentTime;
+
+    // sharp shriek — a fast, jarring pitch sweep
+    const shriek = audioCtx.createOscillator();
+    shriek.type = 'sawtooth';
+    shriek.frequency.setValueAtTime(1800, t0);
+    shriek.frequency.exponentialRampToValueAtTime(220, t0+0.35);
+    const shriekGain = audioCtx.createGain();
+    shriekGain.gain.setValueAtTime(0.5, t0);
+    shriekGain.gain.exponentialRampToValueAtTime(0.001, t0+0.4);
+    shriek.connect(shriekGain); shriekGain.connect(audioCtx.destination);
+    shriek.start(t0); shriek.stop(t0+0.42);
+
+    // noise crunch
     const noise = audioCtx.createBufferSource();
     const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate*0.5), audioCtx.sampleRate);
     const d = buf.getChannelData(0);
     for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1)*Math.pow(1-i/d.length,1.5);
     noise.buffer = buf;
     const g = audioCtx.createGain();
-    g.gain.setValueAtTime(0.6, t0);
+    g.gain.setValueAtTime(0.75, t0);
     g.gain.exponentialRampToValueAtTime(0.001, t0+0.5);
     noise.connect(g); g.connect(audioCtx.destination);
     noise.start(t0);
+
+    // sub-bass hit for physical impact
+    const thud = audioCtx.createOscillator();
+    thud.type = 'sine';
+    thud.frequency.setValueAtTime(140, t0);
+    thud.frequency.exponentialRampToValueAtTime(30, t0+0.3);
+    const thudGain = audioCtx.createGain();
+    thudGain.gain.setValueAtTime(0.7, t0);
+    thudGain.gain.exponentialRampToValueAtTime(0.001, t0+0.35);
+    thud.connect(thudGain); thudGain.connect(audioCtx.destination);
+    thud.start(t0); thud.stop(t0+0.4);
   }
   function playWinSound(){
     if(!audioCtx) return;
@@ -1486,7 +1572,7 @@ try {
       joystickVec = { x: kx/maxR, y: ky/maxR };
     }
     if(lookActive && e.pointerId===lookId){
-      lookDelta += (e.clientX - lookLastX) * TURN_SPEED * 7;
+      lookDelta += (e.clientX - lookLastX) * TURN_SPEED * 3;
       lookLastX = e.clientX;
     }
   });
@@ -1545,6 +1631,34 @@ try {
     if(!isWall(player.x, ny+PLAYER_RADIUS) && !isWall(player.x, ny-PLAYER_RADIUS)) player.y = ny;
   }
 
+  function drawJumpscareFace(){
+    ctx.fillStyle = '#0a0505';
+    ctx.fillRect(0,0,W,H);
+    const cx = W/2 + (Math.random()-0.5)*20, cy = H/2 + (Math.random()-0.5)*20;
+    ctx.save();
+    ctx.shadowColor = 'rgba(200,40,20,0.9)'; ctx.shadowBlur = 40;
+    ctx.fillStyle = '#4a1815';
+    ctx.beginPath();
+    const spikes = 11;
+    const s = H*1.3;
+    for(let i=0;i<=spikes;i++){
+      const t = i/spikes;
+      const ang = -Math.PI/2 + t*Math.PI*2;
+      const jag = (i%2===0) ? 1 : 0.7;
+      ctx.lineTo(cx+Math.cos(ang)*s*0.5*jag, cy+Math.sin(ang)*s*0.5*jag);
+    }
+    ctx.closePath(); ctx.fill();
+
+    ctx.shadowColor = '#ff2b2b'; ctx.shadowBlur = 50;
+    ctx.fillStyle = '#ff2b2b';
+    [-1,1].forEach(side=>{
+      ctx.beginPath();
+      ctx.ellipse(cx+side*W*0.12, cy-H*0.05, W*0.06, H*0.11, 0, 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
   function endGame(won){
     state = won ? 'won' : 'gameover';
     stopAmbientAudio();
@@ -1554,16 +1668,22 @@ try {
       best = loadBest();
       overlayTitle.textContent = 'ESCAPED';
       overlaySub.textContent = 'TIME ' + formatTime(elapsed) + ' — TAP TO RUN AGAIN';
+      statsRow.innerHTML = '';
+      overlay.classList.remove('hidden');
+      if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
     } else {
       playCaughtSound();
-      overlay.classList.add('crashed');
-      setTimeout(()=> overlay.classList.remove('crashed'), 500);
-      overlayTitle.textContent = 'CAUGHT';
-      overlaySub.textContent = 'TAP TO TRY AGAIN';
+      drawJumpscareFace();
+      setTimeout(()=>{
+        overlay.classList.add('crashed');
+        setTimeout(()=> overlay.classList.remove('crashed'), 500);
+        overlayTitle.textContent = 'CAUGHT';
+        overlaySub.textContent = 'TAP TO TRY AGAIN';
+        statsRow.innerHTML = '';
+        overlay.classList.remove('hidden');
+        if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
+      }, 380);
     }
-    statsRow.innerHTML = '';
-    overlay.classList.remove('hidden');
-    if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
   }
 
   // ---------- raycasting render ----------
@@ -1667,32 +1787,42 @@ try {
   // The Watcher — a real silhouette with glowing eyes, not a plain
   // colored blob: dark jagged-edged body, red eyes that pulse
   function drawMonsterSprite(cam, bobOffset){
-    const p = projectSprite(cam, monster.x, monster.y, 0.62);
+    const p = projectSprite(cam, monster.x, monster.y, 0.7);
     if(!p) return;
-    const cx = p.screenX, cy = H/2+bobOffset;
+    // unsettling twitch — small random jitter every frame so it never
+    // looks like it's moving smoothly/naturally
+    const jx = (Math.random()-0.5)*3, jy = (Math.random()-0.5)*3;
+    const cx = p.screenX+jx, cy = H/2+bobOffset+jy;
     const s = p.size;
     ctx.save();
-    ctx.fillStyle = '#160a0a';
+
+    // rim light so the silhouette is actually visible against dark
+    // walls — this was the bug making it look like a plain red dot
+    ctx.shadowColor = 'rgba(200,40,20,0.7)'; ctx.shadowBlur = 14;
+    ctx.fillStyle = '#3a1210';
     ctx.beginPath();
-    const spikes = 7;
+    const spikes = 9;
     for(let i=0;i<=spikes;i++){
       const t = i/spikes;
       const ang = -Math.PI/2 + t*Math.PI;
-      const jag = (i%2===0) ? 1 : 0.82;
-      const rx = Math.sin(ang)*s*0.32*jag, ry = -Math.cos(ang)*s*0.5*jag;
+      const jag = (i%2===0) ? 1 : 0.72;
+      const rx = Math.sin(ang)*s*0.36*jag, ry = -Math.cos(ang)*s*0.55*jag;
       if(i===0) ctx.moveTo(cx+rx, cy+ry); else ctx.lineTo(cx+rx, cy+ry);
     }
-    ctx.lineTo(cx-s*0.3, cy+s*0.5);
-    ctx.lineTo(cx+s*0.3, cy+s*0.5);
+    ctx.lineTo(cx-s*0.32, cy+s*0.55);
+    ctx.lineTo(cx+s*0.32, cy+s*0.55);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255,90,50,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    const eyePulse = 0.7 + Math.sin(elapsed*0.012)*0.3;
-    ctx.shadowColor = '#ff3b3b'; ctx.shadowBlur = 12*eyePulse;
-    ctx.fillStyle = '#ff3b3b';
+    const eyePulse = 0.7 + Math.sin(elapsed*0.02)*0.3;
+    ctx.shadowColor = '#ff2b2b'; ctx.shadowBlur = 18*eyePulse;
+    ctx.fillStyle = '#ff2b2b';
     [-1,1].forEach(side=>{
       ctx.beginPath();
-      ctx.ellipse(cx+side*s*0.11, cy-s*0.14, s*0.045, s*0.07, 0, 0, Math.PI*2);
+      ctx.ellipse(cx+side*s*0.13, cy-s*0.18, s*0.06, s*0.095, 0, 0, Math.PI*2);
       ctx.fill();
     });
     ctx.restore();
@@ -1757,14 +1887,22 @@ try {
       monsterPathAt = now;
       monsterPath = bfsPath(Math.floor(monster.x), Math.floor(monster.y), Math.floor(player.x), Math.floor(player.y));
     }
+    // unpredictable speed bursts — a monster that always moves at the
+    // same constant speed reads as mechanical, not scary
+    if(now > monsterBurstAt){
+      monsterBurstAt = now + 2200 + Math.random()*2800;
+      monsterBurstEndAt = now + 350 + Math.random()*300;
+    }
+    const bursting = now < monsterBurstEndAt;
+    const curMonsterSpeed = bursting ? MONSTER_SPEED*2.4 : MONSTER_SPEED;
     if(monsterPath.length){
       const target = monsterPath[0];
       const mdx = target.x-monster.x, mdy = target.y-monster.y;
       const mdist = Math.hypot(mdx,mdy);
       if(mdist < 0.15){ monsterPath.shift(); }
       else {
-        monster.x += (mdx/mdist)*MONSTER_SPEED*dt;
-        monster.y += (mdy/mdist)*MONSTER_SPEED*dt;
+        monster.x += (mdx/mdist)*curMonsterSpeed*dt;
+        monster.y += (mdy/mdist)*curMonsterSpeed*dt;
       }
     }
 
