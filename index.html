@@ -357,6 +357,23 @@
     font-size: 11px; letter-spacing: 2px; color: var(--amber-faint); text-align: center;
   }
 
+  #wallpapers { border-top: 1px solid rgba(255,184,77,0.12); }
+  .wallpaper-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px; margin-top: 20px;
+  }
+  .wallpaper-card {
+    position: relative; display: block; aspect-ratio: 9/19.5; border-radius: 8px;
+    overflow: hidden; border: 1px solid rgba(255,184,77,0.25); text-decoration: none;
+  }
+  .wallpaper-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .wallpaper-label {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 8px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.85), transparent);
+    color: var(--amber); font-size: 10px; letter-spacing: 1px; font-weight: 700;
+    text-align: center;
+  }
+
   /* ---------- team ---------- */
   #team { border-top: 1px solid rgba(255,184,77,0.12); }
 
@@ -385,6 +402,35 @@
   }
   .status-now { background: rgba(255,184,77,0.15); color: var(--amber); border: 1px solid rgba(255,184,77,0.4); }
   .status-next { background: transparent; color: var(--ink-dim); border: 1px solid rgba(255,255,255,0.15); }
+
+  .progress-tracker { margin-top: 36px; display: flex; flex-direction: column; gap: 18px; }
+  .progress-label {
+    display: flex; justify-content: space-between; font-size: 12px;
+    letter-spacing: 0.5px; margin-bottom: 6px; color: var(--ink-dim);
+  }
+  .progress-label span:last-child { color: var(--amber); font-weight: 700; }
+  .progress-bar {
+    height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, #a86b1a, var(--amber));
+    border-radius: 4px; transition: width 1s ease;
+  }
+
+  #notify { border-top: 1px solid rgba(255,184,77,0.12); text-align: center; padding: 100px 0; }
+  #notify .section-title { margin: 0 auto 10px; }
+  #notify p { margin: 0 auto 28px; }
+  .notify-form {
+    display: flex; gap: 10px; max-width: 420px; margin: 0 auto; flex-wrap: wrap;
+    justify-content: center;
+  }
+  .notify-input {
+    flex: 1; min-width: 200px; padding: 13px 16px; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,184,77,0.25); border-radius: 4px; color: var(--ink);
+    font-family: var(--body); font-size: 14px;
+  }
+  .notify-input::placeholder { color: var(--ink-dim); }
+  .notify-msg { margin-top: 14px; font-size: 12px; color: var(--amber-faint); min-height: 16px; }
 
   /* ---------- community cta ---------- */
   #community {
@@ -647,6 +693,28 @@
   </div>
 </section>
 
+<section id="wallpapers" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">FOR YOUR PHONE</div>
+    <h2 class="section-title">Wallpapers</h2>
+    <p>Something to hold you over. Tap to save.</p>
+    <div class="wallpaper-grid">
+      <a href="wallpaper_logo.jpg" download class="wallpaper-card">
+        <img src="wallpaper_logo.jpg" alt="THE UNSEEN logo wallpaper" loading="lazy">
+        <span class="wallpaper-label">↓ DOWNLOAD</span>
+      </a>
+      <a href="wallpaper_watcher.jpg" download class="wallpaper-card">
+        <img src="wallpaper_watcher.jpg" alt="The Watcher eyes wallpaper" loading="lazy">
+        <span class="wallpaper-label">↓ DOWNLOAD</span>
+      </a>
+      <a href="wallpaper_corridor.jpg" download class="wallpaper-card">
+        <img src="wallpaper_corridor.jpg" alt="Backrooms corridor wallpaper" loading="lazy">
+        <span class="wallpaper-label">↓ DOWNLOAD</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <section id="faq" class="reveal">
   <div class="wrap">
     <div class="eyebrow">FAQ</div>
@@ -789,6 +857,42 @@
       <span class="roadmap-status status-next">LATER</span>
       <span>More monsters, cosmetics, and community-requested features.</span>
     </div>
+
+    <div class="progress-tracker">
+      <div class="progress-item">
+        <div class="progress-label"><span>Website &amp; Community</span><span>100%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label"><span>Core Movement System</span><span>55%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:55%"></div></div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label"><span>The Watcher — AI</span><span>40%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:40%"></div></div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label"><span>First Map</span><span>15%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:15%"></div></div>
+      </div>
+      <div class="progress-item">
+        <div class="progress-label"><span>Cosmetics</span><span>0%</span></div>
+        <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="notify" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">DON'T MISS IT</div>
+    <h2 class="section-title">Get notified at launch</h2>
+    <p>One email, sent once early access actually goes live. Nothing else.</p>
+    <form class="notify-form" id="notifyForm" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+      <input type="email" name="email" placeholder="you@email.com" required class="notify-input">
+      <button type="submit" class="menu-btn">NOTIFY ME</button>
+    </form>
+    <div id="notifyMsg" class="notify-msg"></div>
   </div>
 </section>
 
@@ -1278,6 +1382,32 @@ setupExpandableList('#faqList');
       motionPill.classList.replace('on','off');
       motionPill.textContent = 'OFF';
     }
+  });
+})();
+
+// ---------- notify-me form — submits via fetch so the page never
+// reloads, shows an inline confirmation instead ----------
+(function(){
+  const form = document.getElementById('notifyForm');
+  const msg = document.getElementById('notifyMsg');
+  if(!form) return;
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    msg.textContent = 'Sending…';
+    fetch(form.action, {
+      method: 'POST',
+      body: new FormData(form),
+      headers: { 'Accept': 'application/json' }
+    }).then(res=>{
+      if(res.ok){
+        msg.textContent = "You're on the list.";
+        form.reset();
+      } else {
+        msg.textContent = 'Something went wrong — try again in a moment.';
+      }
+    }).catch(()=>{
+      msg.textContent = 'Something went wrong — try again in a moment.';
+    });
   });
 })();
 
