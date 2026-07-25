@@ -292,6 +292,33 @@
   }
   .team-access-link:hover { opacity: 0.9; }
 
+  .shard-row {
+    margin-top: 20px; text-align: center; font-family: var(--display);
+    font-size: 18px; font-weight: 700; color: var(--amber);
+    letter-spacing: 1px;
+  }
+  .shard-icon { color: #8fe0ff; text-shadow: 0 0 8px rgba(143,224,255,0.6); }
+  .upgrade-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr));
+    gap: 12px; margin-top: 16px;
+  }
+  .upgrade-card {
+    background: var(--panel); border: 1px solid rgba(255,184,77,0.2); border-radius: 4px;
+    padding: 14px;
+  }
+  .upgrade-name { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: 0.5px; }
+  .upgrade-desc { font-size: 11px; color: var(--ink-dim); margin-top: 4px; min-height: 28px; }
+  .upgrade-levels { display: flex; gap: 4px; margin-top: 10px; }
+  .upgrade-pip { width: 14px; height: 5px; border-radius: 2px; background: rgba(255,255,255,0.12); }
+  .upgrade-pip.filled { background: var(--amber); }
+  .upgrade-buy {
+    margin-top: 10px; width: 100%; padding: 8px; border-radius: 3px; border: 1px solid rgba(255,184,77,0.35);
+    background: rgba(255,184,77,0.1); color: var(--amber); font-family: var(--body); font-weight: 700;
+    font-size: 12px; cursor: pointer;
+  }
+  .upgrade-buy:disabled { opacity: 0.4; cursor: default; }
+  .upgrade-buy.maxed { background: rgba(78,201,106,0.12); border-color: rgba(78,201,106,0.4); color: #4ec96a; }
+
   #gameCanvas { width: 100%; height: 100%; display: block; touch-action: none; }
 
   .fps-look-zone {
@@ -319,6 +346,12 @@
   }
   .stamina-fill { height: 100%; width: 100%; background: #6fd8ff; transition: width 0.1s linear; }
   .stamina-fill.low { background: #ff6a3d; }
+  .compass-hud {
+    margin-top: 4px; width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); border: 1px solid rgba(143,224,255,0.4);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .compass-arrow { color: #8fe0ff; font-size: 14px; text-shadow: 0 0 6px rgba(143,224,255,0.7); transition: transform 0.1s linear; }
 
   .joystick-base {
     position: absolute; left: 22px; bottom: 22px; width: 84px; height: 84px; z-index: 5;
@@ -630,6 +663,9 @@
       <div class="fps-hud">
         <div class="fps-timer" id="fpsTimer">0:00</div>
         <div class="stamina-bar"><div class="stamina-fill" id="staminaFill"></div></div>
+        <div class="compass-hud" id="compassHud" style="display:none;">
+          <div class="compass-arrow" id="compassArrow">▲</div>
+        </div>
       </div>
 
       <div class="fps-look-zone" id="lookZone"></div>
@@ -651,6 +687,11 @@
         <button class="team-access-link" id="teamAccessBtn">team access</button>
       </div>
     </div>
+
+    <div class="shard-row">
+      <span class="shard-icon">◆</span> <span id="mazeFragments">0</span> FRAGMENTS
+    </div>
+    <div class="upgrade-grid" id="mazeUpgradeGrid"></div>
   </div>
 </section>
 
@@ -1329,6 +1370,8 @@ try {
   const statsRow = document.getElementById('gameStatsRow');
   const timerEl = document.getElementById('fpsTimer');
   const staminaFillEl = document.getElementById('staminaFill');
+  const compassHud = document.getElementById('compassHud');
+  const compassArrow = document.getElementById('compassArrow');
   const frame = canvas.closest('.game-frame');
   const menuMusic = document.getElementById('menuMusic');
   const joystickBase = document.getElementById('joystickBase');
@@ -1349,30 +1392,43 @@ try {
   resize();
   window.addEventListener('resize', resize);
 
-  // ---- maze — generated with a recursive backtracker and verified
-  // solvable start-to-exit with a BFS search before being hardcoded
-  // here, rather than trusting an unverified layout ----
+  // ---- maze — bigger now (25x25, up from 15x15), generated with a
+  // recursive backtracker and verified solvable start-to-exit, and
+  // both equipment pickup spots verified reachable, all via BFS
+  // before being hardcoded here ----
   const MAP = [
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-    [1,0,1,0,0,0,0,0,0,0,0,0,0,0,1],
-    [1,0,1,1,1,0,1,1,1,1,1,1,1,0,1],
-    [1,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-    [1,1,1,0,1,1,1,1,1,0,1,1,1,0,1],
-    [1,0,1,0,1,0,0,0,1,0,1,0,0,0,1],
-    [1,0,1,0,1,0,1,0,1,0,1,1,1,1,1],
-    [1,0,1,0,1,0,1,0,1,0,0,0,0,0,1],
-    [1,0,1,0,1,0,1,0,1,1,1,1,1,0,1],
-    [1,0,1,0,1,0,1,0,0,0,0,0,1,0,1],
-    [1,0,1,0,1,0,1,1,1,1,1,0,1,0,1],
-    [1,0,1,0,1,0,1,0,0,0,1,0,1,0,1],
-    [1,0,1,0,1,0,1,0,1,1,1,0,1,0,1],
-    [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
-    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,1],
+    [1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1],
+    [1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,1],
+    [1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,1,0,1,0,1],
+    [1,0,1,0,1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1,0,1],
+    [1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1],
+    [1,0,1,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,1,0,1],
+    [1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
+    [1,0,1,0,1,0,1,0,1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+    [1,0,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1,1,1,0,1],
+    [1,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+    [1,0,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,0,1],
+    [1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,1],
+    [1,0,1,1,1,0,1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1],
+    [1,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1],
+    [1,1,1,0,1,1,1,1,1,0,1,0,1,0,1,0,1,0,1,0,1,1,1,1,1],
+    [1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,0,1,0,1,0,0,0,1,0,1],
+    [1,0,1,1,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1],
+    [1,0,0,0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,1],
+    [1,0,1,0,1,0,1,1,1,0,1,1,1,1,1,0,1,0,1,0,1,1,1,0,1],
+    [1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,1,0,1],
+    [1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,0,1,0,1,0,1,1,1,0,1],
+    [1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   ];
   const MAP_W = MAP[0].length, MAP_H = MAP.length;
   const START = { x: 1.5, y: 1.5 };
-  const EXIT = { x: 13.5, y: 13.5 };
-  const MONSTER_SPAWN = { x: 7.5, y: 7.5 };
+  const EXIT = { x: 23.5, y: 23.5 };
+  const MONSTER_SPAWN = { x: 13.5, y: 13.5 };
+  const COMPASS_POS = { x: 11.5, y: 11.5 };
+  const LANTERN_POS = { x: 19.5, y: 5.5 };
 
   function isWall(gx, gy){
     gx = Math.floor(gx); gy = Math.floor(gy);
@@ -1410,17 +1466,89 @@ try {
 
   // ---- movement / rendering tunables ----
   const FOV = Math.PI/3;
-  const WALK_SPEED = 0.0022;
-  const SPRINT_SPEED = 0.0038;
+  const BASE_WALK_SPEED = 0.0022;
+  const BASE_SPRINT_SPEED = 0.0038;
+  const BASE_STAMINA_DRAIN = 0.03;
+  const BASE_FOG_RADIUS = 0.85;
   const MONSTER_SPEED = 0.0024;
   const TURN_SPEED = 0.0028;
   const PLAYER_RADIUS = 0.22;
   const CATCH_DIST = 0.55;
   const WIN_DIST = 0.6;
+  const PICKUP_DIST = 0.5;
+
+  // ---- equipment shop — persistent currency and levels ----
+  const UPGRADE_DEFS = [
+    { id:'sight', name:'EXTENDED SIGHT', desc:'See further into the dark', baseCost:15, costMult:1.6, maxLevel:4 },
+    { id:'feet', name:'SWIFT FEET', desc:'Move and sprint faster', baseCost:18, costMult:1.6, maxLevel:4 },
+    { id:'lungs', name:'IRON LUNGS', desc:'Sprint drains less stamina', baseCost:16, costMult:1.6, maxLevel:4 },
+    { id:'hands', name:'STEADY HANDS', desc:'Start every run with the compass already active', baseCost:45, costMult:1, maxLevel:1 },
+  ];
+  function loadFragments(){
+    try { return parseInt(localStorage.getItem('theunseen_maze_fragments')||'0',10); } catch(e){ return 0; }
+  }
+  function saveFragments(v){
+    try { localStorage.setItem('theunseen_maze_fragments', String(v)); } catch(e){}
+  }
+  function loadUpgrades(){
+    try { return JSON.parse(localStorage.getItem('theunseen_maze_upgrades')||'{}'); } catch(e){ return {}; }
+  }
+  function saveUpgrades(v){
+    try { localStorage.setItem('theunseen_maze_upgrades', JSON.stringify(v)); } catch(e){}
+  }
+  let fragments = loadFragments();
+  let upgrades = loadUpgrades();
+
+  function upgradeCost(def){
+    const lvl = upgrades[def.id] || 0;
+    return Math.round(def.baseCost * Math.pow(def.costMult, lvl));
+  }
+  function curWalkSpeed(){ return BASE_WALK_SPEED * (1 + (upgrades.feet||0)*0.14); }
+  function curSprintSpeed(){ return BASE_SPRINT_SPEED * (1 + (upgrades.feet||0)*0.14); }
+  function curStaminaDrain(){ return BASE_STAMINA_DRAIN * (1 - (upgrades.lungs||0)*0.16); }
+  function curFogRadius(){ return BASE_FOG_RADIUS * (1 + (upgrades.sight||0)*0.35); }
+
+  function renderShop(){
+    const el = document.getElementById('mazeFragments');
+    const grid = document.getElementById('mazeUpgradeGrid');
+    if(!el || !grid) return;
+    el.textContent = fragments;
+    grid.innerHTML = '';
+    UPGRADE_DEFS.forEach(def=>{
+      const lvl = upgrades[def.id] || 0;
+      const maxed = lvl >= def.maxLevel;
+      const cost = upgradeCost(def);
+      const card = document.createElement('div');
+      card.className = 'upgrade-card';
+      const pips = Array.from({length: def.maxLevel}, (_,i)=>
+        `<div class="upgrade-pip ${i<lvl?'filled':''}"></div>`).join('');
+      card.innerHTML = `
+        <div class="upgrade-name">${def.name}</div>
+        <div class="upgrade-desc">${def.desc}</div>
+        <div class="upgrade-levels">${pips}</div>
+        <button class="upgrade-buy ${maxed?'maxed':''}" ${maxed || fragments<cost ? 'disabled':''}>
+          ${maxed ? 'MAXED' : ('◆ ' + cost)}
+        </button>`;
+      const btn = card.querySelector('.upgrade-buy');
+      if(!maxed){
+        btn.addEventListener('click', ()=>{
+          if(fragments < cost) return;
+          fragments -= cost;
+          upgrades[def.id] = lvl + 1;
+          saveFragments(fragments);
+          saveUpgrades(upgrades);
+          renderShop();
+        });
+      }
+      grid.appendChild(card);
+    });
+  }
+  renderShop();
 
   let state = 'ready';
   let cameraMode = 0; // 0 = first person, 1 = second (facing you), 2 = third (behind you)
   let player, monster, monsterPath, monsterPathAt, elapsed, lastTime, monsterBurstAt, monsterBurstEndAt;
+  let hasCompass, hasLantern;
   let stamina, sprinting, jumping, jumpT;
   let joystickVec = {x:0,y:0};
   let lookDelta = 0;
@@ -1465,6 +1593,8 @@ try {
     lookDelta = 0;
     cameraMode = 0;
     if(cameraBtn) cameraBtn.textContent = '📷 1ST PERSON';
+    hasCompass = !!(upgrades.hands);
+    hasLantern = false;
   }
   resetGame();
 
@@ -1666,22 +1796,31 @@ try {
       playWinSound();
       saveBest(elapsed);
       best = loadBest();
+      // faster escapes earn more — capped bonus so it's generous but bounded
+      const earned = 30 + Math.max(0, Math.round(60 - elapsed/1000));
+      fragments += earned;
+      saveFragments(fragments);
       overlayTitle.textContent = 'ESCAPED';
-      overlaySub.textContent = 'TIME ' + formatTime(elapsed) + ' — TAP TO RUN AGAIN';
+      overlaySub.textContent = 'TIME ' + formatTime(elapsed) + ' — +' + earned + ' FRAGMENTS — TAP TO RUN AGAIN';
       statsRow.innerHTML = '';
       overlay.classList.remove('hidden');
       if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
+      renderShop();
     } else {
       playCaughtSound();
       drawJumpscareFace();
+      const earned = 8;
+      fragments += earned;
+      saveFragments(fragments);
       setTimeout(()=>{
         overlay.classList.add('crashed');
         setTimeout(()=> overlay.classList.remove('crashed'), 500);
         overlayTitle.textContent = 'CAUGHT';
-        overlaySub.textContent = 'TAP TO TRY AGAIN';
+        overlaySub.textContent = '+' + earned + ' FRAGMENTS — TAP TO TRY AGAIN';
         statsRow.innerHTML = '';
         overlay.classList.remove('hidden');
         if(menuMusic && !document.body.classList.contains('music-off')) menuMusic.volume = 0.35;
+        renderShop();
       }, 380);
     }
   }
@@ -1745,7 +1884,7 @@ try {
     }
 
     // fog vignette
-    const grad = ctx.createRadialGradient(W/2,H/2,H*0.2, W/2,H/2,H*0.85);
+    const grad = ctx.createRadialGradient(W/2,H/2,H*0.2, W/2,H/2,H*curFogRadius()*(hasLantern?1.35:1));
     grad.addColorStop(0,'rgba(0,0,0,0)');
     grad.addColorStop(1,'rgba(0,0,0,0.6)');
     ctx.fillStyle = grad;
@@ -1754,6 +1893,8 @@ try {
     drawExitSprite(cam, bobOffset);
     drawMonsterSprite(cam, bobOffset);
     if(cam.showPlayer) drawPlayerSprite(cam, bobOffset);
+    if(!hasCompass) drawPickupSprite(cam, COMPASS_POS, bobOffset, '#8fe0ff');
+    if(!hasLantern) drawPickupSprite(cam, LANTERN_POS, bobOffset, '#ffcf5c');
   }
 
   // shared projection math: world position -> screen X, apparent size,
@@ -1846,6 +1987,22 @@ try {
     ctx.restore();
   }
 
+  function drawPickupSprite(cam, pos, bobOffset, color){
+    const p = projectSprite(cam, pos.x, pos.y, 0.28);
+    if(!p) return;
+    const bob = Math.sin(elapsed*0.004)*4;
+    ctx.save();
+    ctx.translate(p.screenX, H/2+bobOffset+bob);
+    ctx.rotate(elapsed*0.0025);
+    ctx.shadowColor = color; ctx.shadowBlur = 16;
+    ctx.fillStyle = color;
+    const s = p.size*0.4;
+    ctx.beginPath();
+    ctx.moveTo(0,-s); ctx.lineTo(s*0.7,0); ctx.lineTo(0,s); ctx.lineTo(-s*0.7,0);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
   function loop(now){
     if(state!=='playing') return;
     if(lastTime===null) lastTime = now;
@@ -1861,7 +2018,7 @@ try {
 
     // movement relative to facing
     const canSprint = sprinting && stamina > 4;
-    const speed = canSprint ? SPRINT_SPEED : WALK_SPEED;
+    const speed = canSprint ? curSprintSpeed() : curWalkSpeed();
     const fwd = -joystickVec.y, strafe = joystickVec.x;
     if(Math.abs(fwd) > 0.05 || Math.abs(strafe) > 0.05){
       const moveX = (Math.cos(player.angle)*fwd + Math.cos(player.angle+Math.PI/2)*strafe) * speed * dt;
@@ -1869,10 +2026,24 @@ try {
       tryMove(player.x+moveX, player.y+moveY);
     }
 
-    if(canSprint) stamina = Math.max(0, stamina - dt*0.03);
+    if(canSprint) stamina = Math.max(0, stamina - dt*curStaminaDrain());
     else stamina = Math.min(100, stamina + dt*0.015);
     staminaFillEl.style.width = stamina + '%';
     staminaFillEl.classList.toggle('low', stamina < 25);
+
+    // equipment pickups
+    if(!hasCompass && Math.hypot(player.x-COMPASS_POS.x, player.y-COMPASS_POS.y) < PICKUP_DIST){
+      hasCompass = true;
+    }
+    if(!hasLantern && Math.hypot(player.x-LANTERN_POS.x, player.y-LANTERN_POS.y) < PICKUP_DIST){
+      hasLantern = true;
+    }
+    compassHud.style.display = hasCompass ? 'flex' : 'none';
+    if(hasCompass){
+      const toExit = Math.atan2(EXIT.y-player.y, EXIT.x-player.x);
+      const rel = toExit - player.angle;
+      compassArrow.style.transform = `rotate(${rel}rad)`;
+    }
 
     let bobOffset = 0;
     if(jumping){
