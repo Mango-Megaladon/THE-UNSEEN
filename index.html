@@ -180,6 +180,43 @@
   }
   #settingsOverlay.open { display: flex; }
 
+  #leaksOverlay {
+    position: fixed; inset: 0; z-index: 50; background: rgba(2,1,0,0.9);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #leaksOverlay.open { display: flex; }
+  .leaks-panel { max-width: 460px; max-height: 82vh; overflow-y: auto; border-color: rgba(255,80,50,0.35); }
+  .leaks-panel h3 { color: #ff8a5c; }
+  .leak-item { margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px dashed rgba(255,80,50,0.2); }
+  .leak-item:last-child { border-bottom: none; margin-bottom: 0; }
+  .leak-tag {
+    font-size: 10px; letter-spacing: 1.5px; color: #ff8a5c; margin-bottom: 8px;
+    font-family: var(--body); font-weight: 700;
+  }
+  .leak-text { font-size: 13px; line-height: 1.6; color: var(--ink-dim); font-style: italic; }
+  .leak-corrupt {
+    color: #ff8a5c; font-style: normal; animation: leakFlicker 1.8s infinite steps(1);
+  }
+  @keyframes leakFlicker { 0%,89% { opacity: 1; } 90%,92% { opacity: 0.2; } 93%,100% { opacity: 1; } }
+  .leak-glitch {
+    height: 90px; border-radius: 3px; margin-top: 6px;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,138,92,0.08) 0px, rgba(255,138,92,0.08) 2px, transparent 2px, transparent 4px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0px, transparent 3px, transparent 9px),
+      #12100c;
+    position: relative; overflow: hidden;
+  }
+  .leak-glitch::after {
+    content: 'NO SIGNAL'; position: absolute; inset: 0; display: flex;
+    align-items: center; justify-content: center; font-size: 11px; letter-spacing: 2px;
+    color: rgba(255,138,92,0.4); animation: leakFlicker 2.4s infinite steps(1);
+  }
+  .leak-caption { font-size: 10px; color: var(--ink-dim); opacity: 0.6; margin-top: 6px; }
+  .leaks-btn {
+    background: rgba(255,80,50,0.08) !important; border-color: rgba(255,80,50,0.3) !important;
+    color: #ff8a5c !important;
+  }
+
   .settings-panel {
     width: 100%; max-width: 420px; background: var(--bg-soft);
     border: 1px solid rgba(255,184,77,0.3); border-radius: 6px; padding: 28px;
@@ -393,6 +430,7 @@
     <a class="menu-btn" href="#team">DEVELOPERS</a>
     <a class="menu-btn" href="#rules">RULES</a>
     <a class="menu-btn" href="#roadmap">UPDATES</a>
+    <button class="menu-btn leaks-btn" id="leaksBtn">LEAKS</button>
   </div>
   <div class="menu-content">
     <div class="title-box">
@@ -427,6 +465,26 @@
         <div class="settings-hint">Turns off animations &amp; typewriter effects</div>
       </div>
       <button class="pill-toggle off" id="motionPill">OFF</button>
+    </div>
+  </div>
+</div>
+
+<div id="leaksOverlay" role="dialog" aria-modal="true" aria-labelledby="leaksHeading">
+  <div class="settings-panel leaks-panel">
+    <h3 id="leaksHeading">⚠ UNVERIFIED <button class="settings-close" id="leaksClose" aria-label="Close leaks">✕</button></h3>
+    <p style="font-size:11px;color:var(--ink-dim);margin:0 0 16px;">Fragments pulled from places they shouldn't have come from. Nothing here is confirmed. Treat it accordingly.</p>
+    <div class="leak-item">
+      <div class="leak-tag">INTERNAL MEMO — PARTIAL</div>
+      <div class="leak-text">"...behavior test 14 still shows it pathing around closed doors it hasn't opened yet. We don't know how it knows. Flagging for—" <span class="leak-corrupt">[REDACTED]</span></div>
+    </div>
+    <div class="leak-item">
+      <div class="leak-tag">BUILD SERVER — CORRUPTED FRAME</div>
+      <div class="leak-glitch" id="leakGlitchCanvas"></div>
+      <div class="leak-caption">authenticity unconfirmed</div>
+    </div>
+    <div class="leak-item">
+      <div class="leak-tag">VOICE LOG — 0:47 REMAINING</div>
+      <div class="leak-text">"—no, go back, go back the way you <span class="leak-corrupt">████████</span> came from, don't look at—" <span class="leak-corrupt">[FILE ENDS]</span></div>
     </div>
   </div>
 </div>
@@ -572,7 +630,7 @@
           <span class="arrow">→</span>
           <div><span class="ftitle">When is it releasing?</span></div>
         </div>
-        <div class="fmore" data-text="No fixed date. Early access happens once there's one full map and one working monster encounter to survive. Progress updates go to the Roadmap section and the Discord first, always."></div>
+        <div class="fmore" data-text="Early access is targeted for September 5, 2026. Check the countdown on the main menu for the live clock. Progress updates go to the Roadmap section and the Discord first, always."></div>
       </li>
       <li tabindex="0" role="button">
         <div class="frow">
@@ -1193,6 +1251,17 @@ setupExpandableList('#faqList');
       motionPill.textContent = 'OFF';
     }
   });
+})();
+
+// ---------- leaks modal ----------
+(function(){
+  const overlay = document.getElementById('leaksOverlay');
+  const openBtn = document.getElementById('leaksBtn');
+  const closeBtn = document.getElementById('leaksClose');
+  if(!overlay || !openBtn) return;
+  openBtn.addEventListener('click', ()=> overlay.classList.add('open'));
+  closeBtn.addEventListener('click', ()=> overlay.classList.remove('open'));
+  overlay.addEventListener('click', (e)=>{ if(e.target === overlay) overlay.classList.remove('open'); });
 })();
 
 // ---------- share button — uses the native share sheet on
