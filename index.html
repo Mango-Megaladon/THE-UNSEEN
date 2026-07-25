@@ -75,6 +75,11 @@
   }
   #whiteFlash.flash { opacity: 1; }
   #heroCanvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; }
+  .flashlight {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(circle at var(--fx,50%) var(--fy,40%), transparent 15px, rgba(2,1,0,0.94) 90px);
+    transition: background-position 0.05s linear;
+  }
   #intro .content { position: relative; z-index: 2; }
 
   /* shared title treatment — identical on both screens */
@@ -413,6 +418,7 @@
 
 <section id="intro" role="button" tabindex="0" aria-label="Tap or press enter to continue to the main menu">
   <canvas id="heroCanvas"></canvas>
+  <div class="flashlight" id="flashlight"></div>
   <div class="content">
     <h1 class="game-title">THE UNSEEN</h1>
   </div>
@@ -637,7 +643,7 @@
           <span class="arrow">→</span>
           <div><span class="ftitle">Will it be free?</span></div>
         </div>
-        <div class="fmore" data-text="Yes, the game itself is free. There will be in-game purchases (cosmetics and similar) further down the line, but the core game staying free and good to play is the priority."></div>
+        <div class="fmore" data-text="The full game will be free. Early access, for those who want in before everyone else, is £4 — a way to support development early, not a permanent price tag. In-game purchases like cosmetics may come later too."></div>
       </li>
       <li tabindex="0" role="button">
         <div class="frow">
@@ -1209,6 +1215,21 @@ setupExpandableList('#faqList');
   // "rubber-band" the page even with overflow:hidden set, so this
   // blocks any touch-drag on the intro screen outright while it's up
   intro.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, { passive: false });
+
+  // flashlight — a little discoverable delight, no button needed, just
+  // move your cursor or finger across the screen to look around
+  const flashlight = document.getElementById('flashlight');
+  function setFlashlightPos(x, y){
+    const rect = intro.getBoundingClientRect();
+    const px = ((x - rect.left) / rect.width) * 100;
+    const py = ((y - rect.top) / rect.height) * 100;
+    flashlight.style.setProperty('--fx', px + '%');
+    flashlight.style.setProperty('--fy', py + '%');
+  }
+  intro.addEventListener('mousemove', (e)=> setFlashlightPos(e.clientX, e.clientY));
+  intro.addEventListener('touchmove', (e)=>{
+    if(e.touches && e.touches[0]) setFlashlightPos(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
 })();
 
 // ---------- settings modal ---------- 
