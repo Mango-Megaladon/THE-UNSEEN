@@ -16,6 +16,7 @@
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -75,11 +76,6 @@
   }
   #whiteFlash.flash { opacity: 1; }
   #heroCanvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.55; }
-  .flashlight {
-    position: absolute; inset: 0; z-index: 1; pointer-events: none;
-    background: radial-gradient(circle at var(--fx,50%) var(--fy,40%), transparent 15px, rgba(2,1,0,0.94) 90px);
-    transition: background-position 0.05s linear;
-  }
   #intro .content { position: relative; z-index: 2; }
 
   /* shared title treatment — identical on both screens */
@@ -217,10 +213,16 @@
     color: rgba(255,138,92,0.4); animation: leakFlicker 2.4s infinite steps(1);
   }
   .leak-caption { font-size: 10px; color: var(--ink-dim); opacity: 0.6; margin-top: 6px; }
-  .leaks-btn {
-    background: rgba(255,80,50,0.08) !important; border-color: rgba(255,80,50,0.3) !important;
-    color: #ff8a5c !important;
+  .leaks-fab {
+    position: fixed; right: 18px; bottom: 18px; z-index: 45;
+    background: rgba(20,10,6,0.92); border: 1.5px solid rgba(255,80,50,0.5);
+    color: #ff8a5c; font-family: var(--body); font-weight: 700; font-size: 13px;
+    letter-spacing: 1px; padding: 13px 20px; border-radius: 30px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.5), 0 0 16px rgba(255,80,50,0.15);
+    cursor: pointer;
   }
+  .leaks-fab:active { background: rgba(255,80,50,0.15); }
+  body.intro-locked .leaks-fab { display: none; }
 
   .settings-panel {
     width: 100%; max-width: 420px; background: var(--bg-soft);
@@ -411,6 +413,24 @@
     footer { flex-direction: column; text-align: center; }
   }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoGame",
+  "name": "THE UNSEEN",
+  "description": "A VR-only backrooms horror game for Meta Quest featuring real gorilla push-based movement and a hunting monster called The Watcher.",
+  "genre": ["Horror", "Survival"],
+  "gamePlatform": "Meta Quest",
+  "applicationCategory": "Game",
+  "publisher": { "@type": "Organization", "name": "Viper Studios" },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "GBP",
+    "availability": "https://schema.org/PreOrder"
+  }
+}
+</script>
 </head>
 <body class="intro-locked">
 
@@ -418,7 +438,6 @@
 
 <section id="intro" role="button" tabindex="0" aria-label="Tap or press enter to continue to the main menu">
   <canvas id="heroCanvas"></canvas>
-  <div class="flashlight" id="flashlight"></div>
   <div class="content">
     <h1 class="game-title">THE UNSEEN</h1>
   </div>
@@ -436,7 +455,6 @@
     <a class="menu-btn" href="#team">DEVELOPERS</a>
     <a class="menu-btn" href="#rules">RULES</a>
     <a class="menu-btn" href="#roadmap">UPDATES</a>
-    <button class="menu-btn leaks-btn" id="leaksBtn">LEAKS</button>
   </div>
   <div class="menu-content">
     <div class="title-box">
@@ -452,7 +470,7 @@
       </div>
     </div>
   </div>
-  <audio id="menuMusic" src="menu_music.wav" loop preload="auto"></audio>
+  <audio id="menuMusic" src="menu_music.wav" loop preload="metadata"></audio></audio>
 </section>
 
 <div id="settingsOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsHeading">
@@ -492,8 +510,11 @@
       <div class="leak-tag">VOICE LOG — 0:47 REMAINING</div>
       <div class="leak-text">"—no, go back, go back the way you <span class="leak-corrupt">████████</span> came from, don't look at—" <span class="leak-corrupt">[FILE ENDS]</span></div>
     </div>
+    <p style="font-size:10px;color:var(--ink-dim);opacity:0.55;margin-top:16px;margin-bottom:0;">(just a bit of in-universe fun for now — real dev footage lands closer to early access)</p>
   </div>
 </div>
+
+<button class="leaks-fab" id="leaksBtn" aria-label="View leaks">👁 LEAKS</button>
 
 <section id="about" class="reveal">
   <div class="wrap">
@@ -1216,20 +1237,6 @@ setupExpandableList('#faqList');
   // blocks any touch-drag on the intro screen outright while it's up
   intro.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, { passive: false });
 
-  // flashlight — a little discoverable delight, no button needed, just
-  // move your cursor or finger across the screen to look around
-  const flashlight = document.getElementById('flashlight');
-  function setFlashlightPos(x, y){
-    const rect = intro.getBoundingClientRect();
-    const px = ((x - rect.left) / rect.width) * 100;
-    const py = ((y - rect.top) / rect.height) * 100;
-    flashlight.style.setProperty('--fx', px + '%');
-    flashlight.style.setProperty('--fy', py + '%');
-  }
-  intro.addEventListener('mousemove', (e)=> setFlashlightPos(e.clientX, e.clientY));
-  intro.addEventListener('touchmove', (e)=>{
-    if(e.touches && e.touches[0]) setFlashlightPos(e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: false });
 })();
 
 // ---------- settings modal ---------- 

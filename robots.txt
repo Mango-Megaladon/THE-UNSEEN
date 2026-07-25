@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mango-megaladon.github.io/THE-UNSEEN/sitemap.xml
