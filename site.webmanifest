@@ -1,0 +1,21 @@
+{
+  "name": "THE UNSEEN",
+  "short_name": "THE UNSEEN",
+  "description": "A VR-only backrooms horror game with real gorilla push-based movement.",
+  "start_url": "https://mango-megaladon.github.io/THE-UNSEEN/",
+  "display": "standalone",
+  "background_color": "#0d0a04",
+  "theme_color": "#0d0a04",
+  "icons": [
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
