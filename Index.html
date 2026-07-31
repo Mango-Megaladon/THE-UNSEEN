@@ -1192,9 +1192,12 @@ function reducedMotionActive(){
     baseAlpha: 0.12 + Math.random()*0.18
   }));
 
-  ctx.font = "16px 'JetBrains Mono', monospace";
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  function setupTextStyle(){
+    ctx.font = "16px 'JetBrains Mono', monospace";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+  }
+  setupTextStyle();
 
   const CONVERGE_MS = 2200;
   const start = performance.now();
@@ -1209,6 +1212,7 @@ function reducedMotionActive(){
     if(curW !== W || curH !== H){
       W = curW; H = curH;
       resize();
+      setupTextStyle();
       particles.forEach(pt => { pt.tx = pt.nx*W; pt.ty = pt.ny*H; });
     }
 
