@@ -1200,61 +1200,47 @@ function reducedMotionActive(){
   const start = performance.now();
 
   function frame(now){
+    // resync canvas backing store + live dimensions every frame —
+    // this makes the whole thing self-healing: even if a resize or
+    // orientation event fires late, is missed, or reports a stale
+    // transient value mid-rotation, the very next frame corrects
+    // itself automatically instead of ever getting stuck
+    const curW = window.innerWidth, curH = window.innerHeight;
+    if(curW !== W || curH !== H){
+      W = curW; H = curH;
+      resize();
+      particles.forEach(pt => { pt.tx = pt.nx*W; pt.ty = pt.ny*H; });
+    }
+
     const t = reducedMotionActive() ? CONVERGE_MS : now - start;
     ctx.clearRect(0,0,W,H);
     const p = Math.min(1, t/CONVERGE_MS);
     const ease = 1 - Math.pow(1-p, 3);
     particles.forEach(pt=>{
-      const cx = pt.x + (pt.tx-pt.x)*ease;
-      const cy = pt.y + (pt.ty-pt.y)*ease;
+      const cx = introShapeReady ? pt.tx : pt.x + (pt.tx-pt.x)*ease;
+      const cy = introShapeReady ? pt.ty : pt.y + (pt.ty-pt.y)*ease;
       ctx.fillStyle = `rgba(220,200,150,${pt.baseAlpha})`;
       ctx.fillText(pt.ch, cx, cy);
     });
     if(!reducedMotionActive() && t < CONVERGE_MS){
       requestAnimationFrame(frame);
     } else {
-      introShapeReady = true;
-      const cue = document.getElementById('introTapCue');
-      if(cue){
-        cue.textContent = 'TAP ANYWHERE TO CONTINUE';
-        cue.classList.remove('locked');
+      if(!introShapeReady){
+        introShapeReady = true;
+        const cue = document.getElementById('introTapCue');
+        if(cue){
+          cue.textContent = 'TAP ANYWHERE TO CONTINUE';
+          cue.classList.remove('locked');
+        }
       }
+      // shape is done converging — no need for 60fps anymore, but
+      // keep a light periodic redraw going so rotation/resize always
+      // self-corrects within a fraction of a second instead of relying
+      // on any single resize event firing at the right time
+      setTimeout(() => requestAnimationFrame(frame), 250);
     }
   }
   requestAnimationFrame(frame);
-
-  // re-fit on resize/orientation change — recalculates every target
-  // position from its stored normalized (0-1) coordinates so the shape
-  // stays centered instead of freezing at the old screen dimensions
-  function refit(){
-    resize();
-    W = window.innerWidth; H = window.innerHeight;
-    particles.forEach(pt => {
-      pt.tx = pt.nx*W; pt.ty = pt.ny*H;
-      if(introShapeReady){ pt.x = pt.tx; pt.y = pt.ty; }
-    });
-    if(introShapeReady || reducedMotionActive()){
-      ctx.clearRect(0,0,W,H);
-      particles.forEach(pt=>{
-        ctx.fillStyle = `rgba(220,200,150,${pt.baseAlpha})`;
-        ctx.fillText(pt.ch, pt.tx, pt.ty);
-      });
-    }
-  }
-  // iOS often fires resize/orientationchange before the screen has
-  // actually finished settling into its new size (especially with the
-  // dynamic Safari toolbar showing/hiding), so a refit that runs
-  // immediately can grab a transient, wrong measurement. Debounce with
-  // a short delay, then double-check shortly after to catch anything
-  // that was still mid-transition.
-  let refitTimer;
-  function scheduleRefit(){
-    clearTimeout(refitTimer);
-    refitTimer = setTimeout(refit, 180);
-    setTimeout(refit, 550);
-  }
-  window.addEventListener('resize', scheduleRefit);
-  window.addEventListener('orientationchange', scheduleRefit);
 })();
 
 // ---------- scroll reveal ----------
