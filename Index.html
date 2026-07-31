@@ -1045,7 +1045,6 @@ function reducedMotionActive(){
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
   resize();
-  window.addEventListener('resize', resize);
 
   const CHARS = ['@','%','#','*','&','=','+','-','/'];
   let W = window.innerWidth, H = window.innerHeight;
@@ -1186,7 +1185,6 @@ function reducedMotionActive(){
   const targets = pickNextShapeGenerator()(N);
   const particles = targets.map(pt => ({
     nx: pt.x, ny: pt.y,
-    tx: pt.x*W, ty: pt.y*H,
     x: Math.random()*W, y: Math.random()*H,
     ch: CHARS[Math.floor(Math.random()*CHARS.length)],
     baseAlpha: 0.12 + Math.random()*0.18
@@ -1202,34 +1200,40 @@ function reducedMotionActive(){
   const CONVERGE_MS = 2200;
   const start = performance.now();
 
+  // Deliberately simple and defensive: every single frame reads the
+  // actual live screen size fresh and computes each particle's target
+  // position fresh from it (nx/ny are the only stored values, both
+  // 0-1 proportions that never go stale). Nothing is cached across
+  // frames except that. There's no "did the size change?" check to
+  // get wrong, no throttle window where staleness can hide, and the
+  // whole body is wrapped in try/finally so if anything ever throws,
+  // the animation loop still reschedules itself instead of silently
+  // dying and leaving the canvas stuck.
   function frame(now){
-    // resync canvas backing store + live dimensions every frame —
-    // this makes the whole thing self-healing: even if a resize or
-    // orientation event fires late, is missed, or reports a stale
-    // transient value mid-rotation, the very next frame corrects
-    // itself automatically instead of ever getting stuck
-    const curW = window.innerWidth, curH = window.innerHeight;
-    if(curW !== W || curH !== H){
-      W = curW; H = curH;
-      resize();
-      setupTextStyle();
-      particles.forEach(pt => { pt.tx = pt.nx*W; pt.ty = pt.ny*H; });
-    }
+    try {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      if(canvas.width !== Math.round(W*dpr) || canvas.height !== Math.round(H*dpr)){
+        resize();
+        setupTextStyle();
+      }
 
-    const t = reducedMotionActive() ? CONVERGE_MS : now - start;
-    ctx.clearRect(0,0,W,H);
-    const p = Math.min(1, t/CONVERGE_MS);
-    const ease = 1 - Math.pow(1-p, 3);
-    particles.forEach(pt=>{
-      const cx = introShapeReady ? pt.tx : pt.x + (pt.tx-pt.x)*ease;
-      const cy = introShapeReady ? pt.ty : pt.y + (pt.ty-pt.y)*ease;
-      ctx.fillStyle = `rgba(220,200,150,${pt.baseAlpha})`;
-      ctx.fillText(pt.ch, cx, cy);
-    });
-    if(!reducedMotionActive() && t < CONVERGE_MS){
-      requestAnimationFrame(frame);
-    } else {
-      if(!introShapeReady){
+      const reduced = reducedMotionActive();
+      const t = reduced ? CONVERGE_MS : now - start;
+      const done = introShapeReady || reduced || t >= CONVERGE_MS;
+      const p = Math.min(1, t/CONVERGE_MS);
+      const ease = 1 - Math.pow(1-p, 3);
+
+      ctx.clearRect(0,0,W,H);
+      particles.forEach(pt=>{
+        const tx = pt.nx*W, ty = pt.ny*H;
+        const cx = done ? tx : pt.x + (tx-pt.x)*ease;
+        const cy = done ? ty : pt.y + (ty-pt.y)*ease;
+        ctx.fillStyle = `rgba(220,200,150,${pt.baseAlpha})`;
+        ctx.fillText(pt.ch, cx, cy);
+      });
+
+      if(done && !introShapeReady){
         introShapeReady = true;
         const cue = document.getElementById('introTapCue');
         if(cue){
@@ -1237,11 +1241,10 @@ function reducedMotionActive(){
           cue.classList.remove('locked');
         }
       }
-      // shape is done converging — no need for 60fps anymore, but
-      // keep a light periodic redraw going so rotation/resize always
-      // self-corrects within a fraction of a second instead of relying
-      // on any single resize event firing at the right time
-      setTimeout(() => requestAnimationFrame(frame), 250);
+    } catch(err){
+      console.error('[heroCanvas]', err);
+    } finally {
+      requestAnimationFrame(frame);
     }
   }
   requestAnimationFrame(frame);
