@@ -1199,20 +1199,42 @@ function reducedMotionActive(){
 
   const CONVERGE_MS = 2200;
   const start = performance.now();
+  const initialW = W, initialH = H;
+  let orientationChanged = false;
 
-  // Deliberately simple and defensive: every single frame reads the
-  // actual live screen size fresh and computes each particle's target
-  // position fresh from it (nx/ny are the only stored values, both
-  // 0-1 proportions that never go stale). Nothing is cached across
-  // frames except that. There's no "did the size change?" check to
-  // get wrong, no throttle window where staleness can hide, and the
-  // whole body is wrapped in try/finally so if anything ever throws,
-  // the animation loop still reschedules itself instead of silently
-  // dying and leaving the canvas stuck.
+  // This decorative shape has repeatedly ended up broken (shrunk,
+  // misplaced, or invisible) after a screen rotation on iOS, likely
+  // due to how the browser recalculates layout mid-transition. Rather
+  // than keep guessing at a perfect reposition, the safe choice is:
+  // if the screen size ever changes from what it was on load, stop
+  // drawing this effect entirely instead of risking a broken-looking
+  // result. The title text and tap-to-continue behavior are separate
+  // and unaffected either way.
   function frame(now){
     try {
       W = window.innerWidth;
       H = window.innerHeight;
+      if(W !== initialW || H !== initialH){
+        orientationChanged = true;
+      }
+
+      if(orientationChanged){
+        if(canvas.width !== Math.round(W*dpr) || canvas.height !== Math.round(H*dpr)){
+          resize();
+        }
+        ctx.clearRect(0,0,W,H);
+        if(!introShapeReady){
+          introShapeReady = true;
+          const cue = document.getElementById('introTapCue');
+          if(cue){
+            cue.textContent = 'TAP ANYWHERE TO CONTINUE';
+            cue.classList.remove('locked');
+          }
+        }
+        requestAnimationFrame(frame);
+        return;
+      }
+
       if(canvas.width !== Math.round(W*dpr) || canvas.height !== Math.round(H*dpr)){
         resize();
         setupTextStyle();
