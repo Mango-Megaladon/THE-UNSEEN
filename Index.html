@@ -1048,7 +1048,7 @@ function reducedMotionActive(){
   window.addEventListener('resize', resize);
 
   const CHARS = ['@','%','#','*','&','=','+','-','/'];
-  const W = window.innerWidth, H = window.innerHeight;
+  let W = window.innerWidth, H = window.innerHeight;
 
   // six possible shapes — normalized 0-1 point fields
   function pointsGorilla(n){
@@ -1185,6 +1185,7 @@ function reducedMotionActive(){
   const N = 140;
   const targets = pickNextShapeGenerator()(N);
   const particles = targets.map(pt => ({
+    nx: pt.x, ny: pt.y,
     tx: pt.x*W, ty: pt.y*H,
     x: Math.random()*W, y: Math.random()*H,
     ch: CHARS[Math.floor(Math.random()*CHARS.length)],
@@ -1221,6 +1222,27 @@ function reducedMotionActive(){
     }
   }
   requestAnimationFrame(frame);
+
+  // re-fit on resize/orientation change — recalculates every target
+  // position from its stored normalized (0-1) coordinates so the shape
+  // stays centered instead of freezing at the old screen dimensions
+  function refit(){
+    resize();
+    W = window.innerWidth; H = window.innerHeight;
+    particles.forEach(pt => {
+      pt.tx = pt.nx*W; pt.ty = pt.ny*H;
+      if(introShapeReady){ pt.x = pt.tx; pt.y = pt.ty; }
+    });
+    if(introShapeReady || reducedMotionActive()){
+      ctx.clearRect(0,0,W,H);
+      particles.forEach(pt=>{
+        ctx.fillStyle = `rgba(220,200,150,${pt.baseAlpha})`;
+        ctx.fillText(pt.ch, pt.tx, pt.ty);
+      });
+    }
+  }
+  window.addEventListener('resize', refit);
+  window.addEventListener('orientationchange', refit);
 })();
 
 // ---------- scroll reveal ----------
