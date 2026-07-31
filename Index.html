@@ -1241,8 +1241,20 @@ function reducedMotionActive(){
       });
     }
   }
-  window.addEventListener('resize', refit);
-  window.addEventListener('orientationchange', refit);
+  // iOS often fires resize/orientationchange before the screen has
+  // actually finished settling into its new size (especially with the
+  // dynamic Safari toolbar showing/hiding), so a refit that runs
+  // immediately can grab a transient, wrong measurement. Debounce with
+  // a short delay, then double-check shortly after to catch anything
+  // that was still mid-transition.
+  let refitTimer;
+  function scheduleRefit(){
+    clearTimeout(refitTimer);
+    refitTimer = setTimeout(refit, 180);
+    setTimeout(refit, 550);
+  }
+  window.addEventListener('resize', scheduleRefit);
+  window.addEventListener('orientationchange', scheduleRefit);
 })();
 
 // ---------- scroll reveal ----------
