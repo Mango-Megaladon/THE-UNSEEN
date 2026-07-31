@@ -58,6 +58,23 @@
 
   ::selection { background: var(--amber); color: #1a1509; }
 
+  #bgGrid {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background-image: repeating-linear-gradient(
+      to right, rgba(255,184,77,0.05) 0px, rgba(255,184,77,0.05) 1px,
+      transparent 1px, transparent 90px
+    );
+    opacity: 0.5;
+    animation: bgDrift 60s linear infinite alternate;
+  }
+  @keyframes bgDrift {
+    0%   { transform: scale(1); }
+    100% { transform: scale(1.15); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #bgGrid { animation: none; }
+  }
+
   .wrap { max-width: 900px; margin: 0 auto; padding: 0 24px; }
   section { padding: 100px 0; position: relative; }
 
@@ -488,6 +505,7 @@
 </script>
 </head>
 <body class="intro-locked">
+<div id="bgGrid"></div>
 
 <div id="whiteFlash"></div>
 
@@ -671,9 +689,16 @@
   <div class="wrap">
     <div class="eyebrow">WHAT IS THIS PLACE</div>
     <h2 class="section-title">Nobody built this</h2>
-    <p>No one designed it. It doesn't appear on any blueprint, any map, any deed. You don't find the backrooms — it finds you. A wrong turn. A door that wasn't there yesterday. A moment of not paying attention.</p>
-    <p>The walls are always the same sick yellow. The lights always hum the same broken frequency. And something that used to be alive is always a few rooms ahead of you, or a few rooms behind — you're never quite sure which is worse.</p>
-    <p>Nobody has mapped it end to end. Nobody who's tried has come back to finish the map.</p>
+    <div style="border:1px solid var(--amber-faint);background:#0a0703;padding:20px 22px;font-family:var(--display);font-size:13px;line-height:1.9;">
+      <div style="color:var(--danger);letter-spacing:2px;margin-bottom:14px;">ACCESS TERMINAL ▮▯▯▯▯▯▯▯▯▯</div>
+      <div style="color:var(--amber-faint);margin-bottom:4px;">LOG_001</div>
+      <div style="color:var(--ink);">You woke up.</div>
+      <div style="color:var(--danger-dim);margin-bottom:14px;">That wasn't supposed to happen.</div>
+      <div style="color:var(--ink-dim);">No one designed it. It doesn't appear on any blueprint, any map, any deed. You don't find the backrooms — it finds you. A wrong turn. A door that wasn't there yesterday. A moment of not paying attention.</div>
+      <div style="color:var(--ink-dim);margin-top:10px;">The walls are always the same sick yellow. The lights always hum the same broken frequency. And something that used to be alive is always a few rooms ahead of you, or a few rooms behind — you're never quite sure which is worse.</div>
+      <div style="color:var(--ink-dim);margin-top:10px;">Nobody has mapped it end to end. Nobody who's tried has come back to finish the map.</div>
+      <div style="color:var(--amber-faint);margin-top:16px;font-size:11px;letter-spacing:1px;">[ MORE LOGS UNLOCK AS DEVELOPMENT CONTINUES ]</div>
+    </div>
   </div>
 </section>
 
@@ -682,10 +707,16 @@
     <div class="eyebrow">FIRST ENCOUNTER</div>
     <h2 class="section-title">The Watcher</h2>
     <div class="monster-card" id="monsterCard">
-      <div class="monster-eye" id="monsterEye"><div class="monster-pupil" id="monsterPupil"></div></div>
+      <div class="monster-eye" id="monsterEye" role="button" tabindex="0" aria-label="???" style="cursor:pointer;"><div class="monster-pupil" id="monsterPupil"></div></div>
       <div>
         <h3>Half gorilla. Half something else.</h3>
         <p class="type-target" data-typewriter="One side of it still looks like it used to be alive. The other side stopped being organic a long time ago. It notices you before you notice it — and once it starts moving, it doesn't stop getting faster."></p>
+      </div>
+    </div>
+    <div id="eyeSecret" style="max-height:0;overflow:hidden;transition:max-height 0.5s ease, opacity 0.5s ease;opacity:0;margin-top:0;">
+      <div style="border:1px solid var(--danger-dim);background:rgba(122,31,31,0.08);padding:16px 18px;margin-top:16px;font-family:var(--display);">
+        <div style="font-size:11px;letter-spacing:3px;color:var(--danger);margin-bottom:6px;">⚠ LOG FOUND</div>
+        <div style="font-size:14px;color:var(--ink);">"The Watcher knows you're here."</div>
       </div>
     </div>
   </div>
@@ -826,6 +857,15 @@
     </div>
 
     <div class="press-block">
+      <div class="press-label">BRAND</div>
+      <ul class="press-facts">
+        <li><b>Primary colours:</b> amber #ffd97a / #ffb84d, near-black #050301, red accent #ff3b3b</li>
+        <li><b>Typography:</b> Space Mono (headings), JetBrains Mono (body)</li>
+        <li><b>Tone:</b> dread and stillness over jump-scare spam — "It's always watching"</li>
+      </ul>
+    </div>
+
+    <div class="press-block">
       <div class="press-label">CONTACT</div>
       <p style="font-size:14px;">Fastest way to reach the team is Discord — <a href="https://discord.gg/v27sbAmsJk" target="_blank" rel="noopener">discord.gg/v27sbAmsJk</a></p>
     </div>
@@ -849,7 +889,26 @@
   <div class="wrap">
     <div class="eyebrow">ROADMAP</div>
     <h2 class="section-title">Where things stand</h2>
-    <p style="font-size:12px;letter-spacing:1.5px;color:var(--amber-faint);margin:-16px 0 30px;">LAST UPDATED: JULY 26, 2026</p>
+
+    <div style="border:1px solid var(--amber-faint);background:#0a0703;padding:20px 22px;font-family:var(--display);font-size:13px;line-height:2.1;margin-bottom:30px;">
+      <div style="color:var(--ink-dim);">NOW</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Prototype</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Movement</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Level 0</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--amber);">Alpha</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Closed Testing</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Early Access</div>
+      <div style="color:var(--amber-faint);">↓</div>
+      <div style="color:var(--ink-dim);">Version 1.0</div>
+    </div>
+
+    <p style="font-size:12px;letter-spacing:1.5px;color:var(--amber-faint);margin:0 0 30px;">LAST UPDATED: JULY 26, 2026</p>
 
     <div class="roadmap-row">
       <span class="roadmap-status status-now">JUL 26, 2026</span>
@@ -894,6 +953,22 @@
         <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="devlog" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">DEVLOG</div>
+    <h2 class="section-title">Longer updates, when there's something to say</h2>
+    <p>The roadmap above tracks quick progress notes. This is for the longer version — what changed, why, and what it actually felt like to build.</p>
+    <ul class="feature-list" id="devlogList">
+      <li style="cursor:default;">
+        <div class="frow">
+          <span class="arrow">—</span>
+          <div><span class="fdesc">No devlog entries yet. First one goes up once there's real footage to talk about — check Discord in the meantime, that's where progress gets posted first.</span></div>
+        </div>
+      </li>
+    </ul>
   </div>
 </section>
 
@@ -948,8 +1023,11 @@ let introShapeReady = false;
 // toggle in the settings panel, checked live rather than cached so
 // flipping the setting mid-session takes effect immediately
 function reducedMotionActive(){
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const bg = document.getElementById('bgGrid');
+  const active = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     || document.documentElement.classList.contains('force-reduce-motion');
+  if(bg) bg.style.animationPlayState = active ? 'paused' : 'running';
+  return active;
 }
 
 // ---------- hero: ASCII symbols scatter in and converge into
@@ -1300,6 +1378,22 @@ setupExpandableList('#faqList');
   window.addEventListener('touchmove', e => {
     if(e.touches[0]) updatePupil(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: true });
+})();
+
+// ---------- hidden easter egg: click the eye, find a log ----------
+(function(){
+  const eye = document.getElementById('monsterEye');
+  const secret = document.getElementById('eyeSecret');
+  if(!eye || !secret) return;
+  let revealed = false;
+  function reveal(){
+    if(revealed) return;
+    revealed = true;
+    secret.style.maxHeight = '200px';
+    secret.style.opacity = '1';
+  }
+  eye.addEventListener('click', reveal);
+  eye.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' ') reveal(); });
 })();
 
 // ---------- "the unseen" — the tab title changes the moment you look away ----------
