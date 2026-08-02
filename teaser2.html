@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>THE UNSEEN — recovered footage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%; background:#000; overflow:hidden;
+    font-family:'JetBrains Mono', monospace;
+  }
+  #stage {
+    position:fixed; inset:0; background:#000;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas#fx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+
+  /* scanlines + vignette, always on, sells the "footage" feel */
+  #scanlines {
+    position:fixed; inset:0; pointer-events:none; z-index:50; mix-blend-mode:overlay;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.035) 0px,
+      rgba(255,255,255,0.035) 1px,
+      transparent 2px,
+      transparent 3px
+    );
+  }
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:49;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,0.75) 100%);
+  }
+  #grain { position:fixed; inset:0; pointer-events:none; z-index:48; opacity:0.05; }
+
+  #hud {
+    position:fixed; inset:0; z-index:60; pointer-events:none;
+    font-family:'JetBrains Mono', monospace;
+    color:#ff5050; font-size:13px; letter-spacing:1px;
+    opacity:0; transition:opacity .3s;
+  }
+  #hud.show { opacity:1; }
+  #rec {
+    position:absolute; top:22px; left:22px; display:flex; align-items:center; gap:8px;
+  }
+  #rec .dot {
+    width:9px; height:9px; border-radius:50%; background:#ff2e2e;
+    box-shadow:0 0 10px #ff2e2e; animation:blink 1s steps(2) infinite;
+  }
+  @keyframes blink { 50% { opacity:0.15; } }
+  #timestamp { position:absolute; top:22px; right:22px; color:#ff9a9a; font-size:12px; }
+  #framecount { position:absolute; bottom:18px; right:22px; color:rgba(255,80,80,0.5); font-size:11px; }
+  #tag { position:absolute; bottom:18px; left:22px; color:rgba(255,154,154,0.6); font-size:11px; letter-spacing:2px; }
+
+  #caption {
+    position:fixed; left:0; right:0; bottom:14%; z-index:55;
+    text-align:center; font-family:'JetBrains Mono', monospace;
+    font-size:15px; color:#e8dcc4; letter-spacing:0.5px;
+    text-shadow:0 0 8px rgba(0,0,0,0.9);
+    opacity:0; padding:0 30px;
+  }
+
+  #centerText {
+    position:fixed; inset:0; z-index:40; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; gap:10px;
+  }
+
+  .eyes { display:flex; gap:26px; }
+  .eye {
+    width:34px; height:44px; border-radius:50%; background:#ff2e2e;
+    box-shadow:0 0 40px 14px rgba(255,46,46,0.55);
+    opacity:0; transform:scale(0.6);
+  }
+
+  #startScreen {
+    position:fixed; inset:0; z-index:100; background:#000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; cursor:pointer;
+  }
+  #startScreen h1 {
+    font-family:'Space Mono', monospace; color:#ffd97a; font-size:15px;
+    letter-spacing:4px; text-transform:uppercase;
+  }
+  #startScreen p { color:#7a6f56; font-size:11px; letter-spacing:1px; }
+  #startScreen .tapline { color:#ff8080; font-size:11px; letter-spacing:2px; margin-top:18px; animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+  .redact {
+    font-family:'Space Mono', monospace; font-weight:700; letter-spacing:3px;
+    font-size:clamp(28px, 8vw, 54px); color:#ffd97a;
+  }
+  .redact span { display:inline-block; background:#000; }
+  .redact span.revealed { background:transparent; }
+
+  .sub { font-family:'JetBrains Mono', monospace; color:#a89a7a; font-size:13px; letter-spacing:2px; opacity:0; }
+
+  #endcard {
+    position:fixed; inset:0; z-index:70; background:#050301;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; opacity:0; text-align:center; padding:24px;
+  }
+  #endcard .title { font-family:'Space Mono', monospace; color:#ffd97a; font-size:clamp(24px,7vw,40px); letter-spacing:3px; }
+  #endcard .line { font-family:'JetBrains Mono', monospace; color:#c9bfa0; font-size:14px; letter-spacing:1px; }
+  #endcard .price { font-family:'Space Mono', monospace; color:#ff8080; font-size:15px; letter-spacing:2px; }
+  #endcard .cmd {
+    font-family:'JetBrains Mono', monospace; color:#7fffb0; font-size:13px;
+    border:1px solid #2a2a1a; padding:10px 18px; letter-spacing:1px;
+  }
+  #endcard .cmd::before { content:"> "; color:#ffd97a; }
+
+  #flash { position:fixed; inset:0; background:#fff; z-index:90; opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+
+<div id="startScreen">
+  <h1>THE UNSEEN</h1>
+  <p>RECOVERED FOOTAGE — FILE 004</p>
+  <div class="tapline">TAP TO PLAY · SOUND ON</div>
+</div>
+
+<div id="stage">
+  <canvas id="fx"></canvas>
+  <div id="centerText">
+    <div class="eyes" id="eyes">
+      <div class="eye"></div>
+      <div class="eye"></div>
+    </div>
+    <div class="redact" id="redactText"></div>
+    <div class="sub" id="subText"></div>
+  </div>
+  <div id="caption"></div>
+</div>
+
+<div id="hud">
+  <div id="rec"><div class="dot"></div>REC</div>
+  <div id="timestamp">00:00:00</div>
+  <div id="tag">CAM_04 · SUBLEVEL</div>
+  <div id="framecount">F00000</div>
+</div>
+
+<div id="scanlines"></div>
+<div id="vignette"></div>
+<canvas id="grain"></canvas>
+<div id="flash"></div>
+<div id="endcard">
+  <div class="title">THE UNSEEN</div>
+  <div class="line">VR backrooms horror — it's always watching.</div>
+  <div class="price">EARLY ACCESS · SEPT 5 · £4</div>
+  <div class="cmd">JOIN DISCORD</div>
+</div>
+
+<script>
+/* ================= AUDIO — synthesized, no external files ================= */
+let actx;
+function initAudio(){ actx = new (window.AudioContext || window.webkitAudioContext)(); }
+
+function noiseBurst(duration=0.15, gainVal=0.25, filterFreq=1800){
+  const bufferSize = actx.sampleRate * duration;
+  const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+  const src = actx.createBufferSource();
+  src.buffer = buffer;
+  const filt = actx.createBiquadFilter();
+  filt.type = "highpass"; filt.frequency.value = filterFreq;
+  const gain = actx.createGain();
+  gain.gain.value = gainVal;
+  src.connect(filt); filt.connect(gain); gain.connect(actx.destination);
+  src.start();
+}
+
+function beep(freq=880, duration=0.06, gainVal=0.05, delay=0){
+  const t = actx.currentTime + delay;
+  const osc = actx.createOscillator();
+  const gain = actx.createGain();
+  osc.type = "square"; osc.frequency.value = freq;
+  gain.gain.setValueAtTime(gainVal, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t+duration);
+  osc.connect(gain); gain.connect(actx.destination);
+  osc.start(t); osc.stop(t+duration);
+}
+
+function drone(startDelay=0, duration=20, gainVal=0.05){
+  const t = actx.currentTime + startDelay;
+  const osc1 = actx.createOscillator();
+  const osc2 = actx.createOscillator();
+  osc1.type = "sawtooth"; osc1.frequency.value = 42;
+  osc2.type = "sine"; osc2.frequency.value = 44.5;
+  const gain = actx.createGain();
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.linearRampToValueAtTime(gainVal, t+2);
+  gain.gain.linearRampToValueAtTime(0.0001, t+duration);
+  osc1.connect(gain); osc2.connect(gain); gain.connect(actx.destination);
+  osc1.start(t); osc2.start(t);
+  osc1.stop(t+duration+0.5); osc2.stop(t+duration+0.5);
+}
+
+function stinger(delay=0){
+  const t = actx.currentTime + delay;
+  const osc = actx.createOscillator();
+  const gain = actx.createGain();
+  osc.type = "sawtooth"; osc.frequency.setValueAtTime(120, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t+0.4);
+  gain.gain.setValueAtTime(0.22, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t+0.5);
+  osc.connect(gain); gain.connect(actx.destination);
+  osc.start(t); osc.stop(t+0.55);
+  noiseBurst(0.25, 0.35, 400);
+}
+
+/* ================= VISUAL FX: static canvas ================= */
+const fx = document.getElementById('fx');
+const fctx = fx.getContext('2d');
+function resize(){ fx.width = window.innerWidth; fx.height = window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+
+let staticIntensity = 0; // 0-1, controls how much static noise draws each frame
+function drawStatic(){
+  if (staticIntensity > 0.01){
+    const w = fx.width, h = fx.height;
+    const imgData = fctx.createImageData(w, h);
+    const d = imgData.data;
+    for (let i=0;i<d.length;i+=4){
+      const v = Math.random() < staticIntensity ? Math.random()*255 : 0;
+      const a = Math.random() < staticIntensity ? 255 : 0;
+      d[i]=d[i+1]=d[i+2]=v; d[i+3]=a*0.5;
+    }
+    fctx.putImageData(imgData,0,0);
+  } else {
+    fctx.clearRect(0,0,fx.width,fx.height);
+  }
+  requestAnimationFrame(drawStatic);
+}
+drawStatic();
+
+function glitchCut(peak=0.85, decay=350){
+  staticIntensity = peak;
+  const start = performance.now();
+  function step(){
+    const t = performance.now()-start;
+    staticIntensity = Math.max(0, peak * (1 - t/decay));
+    if (t < decay) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* subtle grain overlay, static image, cheap */
+const grain = document.getElementById('grain');
+const gctx = grain.getContext('2d');
+function drawGrain(){
+  grain.width = 160; grain.height = 90;
+  const imgData = gctx.createImageData(160,90);
+  for (let i=0;i<imgData.data.length;i+=4){
+    const v = Math.random()*255;
+    imgData.data[i]=imgData.data[i+1]=imgData.data[i+2]=v;
+    imgData.data[i+3]=40;
+  }
+  gctx.putImageData(imgData,0,0);
+}
+drawGrain(); setInterval(drawGrain, 100);
+
+/* ================= TIMESTAMP / FRAME COUNTER ================= */
+let elapsed = 0;
+let hudTimer = null;
+function startHud(){
+  document.getElementById('hud').classList.add('show');
+  hudTimer = setInterval(()=>{
+    elapsed += 1/12;
+    const total = elapsed;
+    const hh = String(Math.floor(total/3600)).padStart(2,'0');
+    const mm = String(Math.floor((total%3600)/60)).padStart(2,'0');
+    const ss = String(Math.floor(total%60)).padStart(2,'0');
+    document.getElementById('timestamp').textContent = `${hh}:${mm}:${ss}`;
+    document.getElementById('framecount').textContent = `F${String(Math.floor(total*24)).padStart(5,'0')}`;
+  }, 1000/12);
+}
+
+/* ================= CAPTION HELPER ================= */
+function setCaption(text, duration=1800){
+  const cap = document.getElementById('caption');
+  cap.textContent = text;
+  cap.style.transition = 'opacity .25s';
+  cap.style.opacity = 1;
+  setTimeout(()=>{ cap.style.opacity = 0; }, duration);
+}
+
+/* ================= REDACTED TEXT REVEAL ================= */
+function revealRedacted(word, el, stepDelay=90){
+  el.innerHTML = '';
+  const letters = word.split('');
+  letters.forEach((ch,i)=>{
+    const span = document.createElement('span');
+    span.textContent = ch === ' ' ? '\u00A0\u00A0' : ch;
+    el.appendChild(span);
+  });
+  letters.forEach((ch,i)=>{
+    setTimeout(()=>{
+      el.children[i].classList.add('revealed');
+      if (ch !== ' ') beep(1200 + Math.random()*400, 0.02, 0.02);
+    }, i*stepDelay);
+  });
+}
+
+/* ================= MAIN TIMELINE ================= */
+function playTimeline(){
+  startHud();
+  drone(0, 19, 0.045);
+
+  // 0.0s — quick static burst to open, camera "kicks on"
+  glitchCut(0.9, 300);
+  noiseBurst(0.3, 0.3, 300);
+  beep(220, 0.1, 0.04);
+
+  setTimeout(()=> setCaption("...FOOTAGE RECOVERED FROM SUBLEVEL CAM_04..."), 400);
+
+  // 2.2s — first glitch cut, eyes begin to fade in dim
+  setTimeout(()=>{
+    glitchCut(0.6, 250);
+    document.getElementById('eyes').style.transition = 'opacity 1.2s';
+    document.querySelectorAll('.eye').forEach(e=>{
+      e.style.transition = 'opacity 1.4s, transform 1.4s';
+      e.style.opacity = 0.85;
+      e.style.transform = 'scale(1)';
+    });
+  }, 2200);
+
+  setTimeout(()=> setCaption("something is moving between the walls"), 3200);
+
+  // 6.0s — hard glitch cut, static spike, stinger begins to build tension
+  setTimeout(()=>{
+    glitchCut(1.0, 400);
+    noiseBurst(0.2, 0.35, 500);
+    beep(90, 0.15, 0.05);
+    document.querySelectorAll('.eye').forEach(e=>{ e.style.transform = 'scale(1.15)'; });
+  }, 6000);
+
+  setTimeout(()=> setCaption("it knows the camera is here"), 6800);
+
+  // 9.0s — full blackout + flash, eyes vanish, hud briefly cuts
+  setTimeout(()=>{
+    glitchCut(1.0, 500);
+    document.getElementById('hud').classList.remove('show');
+    document.querySelectorAll('.eye').forEach(e=>{ e.style.opacity = 0; });
+    const flash = document.getElementById('flash');
+    flash.style.transition = 'opacity .06s';
+    flash.style.opacity = 0.9;
+    setTimeout(()=>{ flash.style.opacity = 0; }, 90);
+    stinger(0.05);
+  }, 9000);
+
+  // 9.6s — redacted title reveal, terminal-style, letter by letter
+  setTimeout(()=>{
+    const el = document.getElementById('redactText');
+    revealRedacted('THE UNSEEN', el, 85);
+    const sub = document.getElementById('subText');
+    sub.textContent = 'VR BACKROOMS HORROR';
+    sub.style.transition = 'opacity 1s';
+    setTimeout(()=>{ sub.style.opacity = 1; }, 1100);
+  }, 9700);
+
+  setTimeout(()=> setCaption("case file unsealed"), 12800);
+
+  // 15.2s — glitch transition into end card
+  setTimeout(()=>{
+    glitchCut(1.0, 450);
+    noiseBurst(0.25, 0.3, 400);
+  }, 15200);
+
+  setTimeout(()=>{
+    document.getElementById('centerText').style.opacity = 0;
+    document.getElementById('centerText').style.transition = 'opacity .3s';
+    document.getElementById('caption').style.opacity = 0;
+    document.getElementById('endcard').style.transition = 'opacity .8s';
+    document.getElementById('endcard').style.opacity = 1;
+  }, 15600);
+
+  // 19s — loop point: fade endcard slightly then hold (loopable for TikTok/reels)
+}
+
+/* ================= START ================= */
+document.getElementById('startScreen').addEventListener('click', function(){
+  initAudio();
+  this.style.transition = 'opacity .4s';
+  this.style.opacity = 0;
+  setTimeout(()=>{ this.style.display = 'none'; }, 400);
+  playTimeline();
+}, { once:true });
+</script>
+</body>
+</html>
