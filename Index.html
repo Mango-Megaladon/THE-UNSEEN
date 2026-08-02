@@ -239,6 +239,12 @@
     color: rgba(255,138,92,0.4); animation: leakFlicker 2.4s infinite steps(1);
   }
   .leak-caption { font-size: 10px; color: var(--ink-dim); opacity: 0.6; margin-top: 6px; }
+  .leak-video-frame {
+    width: 100%; max-width: 220px; aspect-ratio: 9/16; margin: 6px auto 0;
+    border: 1px solid rgba(255,138,92,0.3); background: #000; border-radius: 3px;
+    overflow: hidden; position: relative;
+  }
+  .leak-video-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
   .leaks-fab {
     position: fixed; right: 18px; bottom: 18px; z-index: 45;
     background: rgba(20,10,6,0.92); border: 1.5px solid rgba(255,80,50,0.5);
@@ -584,6 +590,16 @@
       <div class="leak-tag">VOICE LOG — 0:47 REMAINING</div>
       <div class="leak-text">"—no, go back, go back the way you <span class="leak-corrupt">████████</span> came from, don't look at—" <span class="leak-corrupt">[FILE ENDS]</span></div>
     </div>
+    <div class="leak-item">
+      <div class="leak-tag">RECOVERED CLIP — FILE 003</div>
+      <div class="leak-video-frame"><iframe src="teaser.html" loading="lazy" title="recovered footage file 003"></iframe></div>
+      <div class="leak-caption">tap inside the frame to play · sound recommended</div>
+    </div>
+    <div class="leak-item">
+      <div class="leak-tag">RECOVERED CLIP — FILE 004</div>
+      <div class="leak-video-frame"><iframe src="teaser2.html" loading="lazy" title="recovered footage file 004"></iframe></div>
+      <div class="leak-caption">tap inside the frame to play · sound recommended</div>
+    </div>
     <p style="font-size:10px;color:var(--ink-dim);opacity:0.55;margin-top:16px;margin-bottom:0;">(just a bit of in-universe fun for now — real dev footage lands closer to early access)</p>
   </div>
 </div>
@@ -885,10 +901,29 @@
   </div>
 </section>
 
+<section id="requirements" class="reveal">
+  <div class="wrap">
+    <div class="eyebrow">SYSTEM REQUIREMENTS</div>
+    <h2 class="section-title">What you'll need</h2>
+    <p>The goal is to support as many headsets as possible, not lock the game to whatever's newest. Final minimum specs are still being tested — this section will get more specific as development continues.</p>
+    <ul class="feature-list">
+      <li style="cursor:default;"><div class="frow"><span class="arrow">—</span><div><span class="fdesc">Aiming for broad compatibility, ideally from Quest 2 onward.</span></div></div></li>
+      <li style="cursor:default;"><div class="frow"><span class="arrow">—</span><div><span class="fdesc">If performance forces a cutoff, it'll be a newer-headsets-only limit rather than the reverse.</span></div></div></li>
+      <li style="cursor:default;"><div class="frow"><span class="arrow">—</span><div><span class="fdesc">Roomscale tracking and hand controllers required, as noted in Policies &amp; Rules above.</span></div></div></li>
+      <li style="cursor:default;"><div class="frow"><span class="arrow">—</span><div><span class="fdesc">Exact minimum specs (storage, RAM) will be published here once performance testing is further along.</span></div></div></li>
+    </ul>
+  </div>
+</section>
+
 <section id="roadmap" class="reveal">
   <div class="wrap">
     <div class="eyebrow">ROADMAP</div>
     <h2 class="section-title">Where things stand</h2>
+
+    <div style="border:1px solid var(--amber-faint);background:#0a0703;padding:14px 18px;margin-bottom:24px;font-family:var(--display);font-size:13px;">
+      <span style="color:var(--amber-faint);letter-spacing:2px;">CURRENT STATUS —</span>
+      <span style="color:var(--ink);"> developer traveling, active build work resumes soon. Follow Discord for the first real update.</span>
+    </div>
 
     <div style="border:1px solid var(--amber-faint);background:#0a0703;padding:20px 22px;font-family:var(--display);font-size:13px;line-height:2.1;margin-bottom:30px;">
       <div style="color:var(--ink-dim);">NOW</div>
